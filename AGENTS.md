@@ -43,6 +43,8 @@ Small metadata files are tracked:
 ```text
 artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 artifacts/release/artifacts-manifest.sha256.txt
+demo/entry/src/main/resources/rawfile/dog.metadata.json
+demo/entry/src/main/resources/rawfile/cat.metadata.json
 ```
 
 Do not commit:
@@ -68,6 +70,7 @@ docs/stage-2-onnx-export.md           ONNX export and ONNX Runtime checks
 docs/stage-3-onnx-to-om.md            OMG conversion and OM notes
 docs/stage-4-vit-projector-chain.md   current ViT + projector chain
 docs/release-artifacts.md             GitHub Release asset workflow
+docs/yellow-zone-validation-runbook.md yellow-zone device validation runbook
 docs/next-steps.md                    active next steps
 ```
 
@@ -98,8 +101,13 @@ ONNX. The `staticpos` export bypasses it for fixed `448 x 448` input.
 `demo/` is the HarmonyOS Native C++ workspace. Generated DevEco/Hvigor folders
 must stay out of git.
 
-Current demo state: blank Native C++ template with sample NAPI `add` function.
-Real CANN/NN runtime inference code is not implemented yet.
+Current demo state: Native C++ validation demo with NAPI methods:
+
+```text
+listTestCases()
+runOnce(resourceManager, caseName)
+runStability(resourceManager, caseName, repeatCount)
+```
 
 The first device validation should use raw fp32 tensor files:
 

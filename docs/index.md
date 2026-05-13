@@ -63,6 +63,12 @@ release-artifacts.md
 GitHub Release asset workflow and large-file policy.
 
 ```text
+yellow-zone-validation-runbook.md
+```
+
+Step-by-step yellow-zone DevEco/HarmonyOS device validation guide.
+
+```text
 next-steps.md
 ```
 
