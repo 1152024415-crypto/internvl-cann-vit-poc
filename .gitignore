@@ -11,3 +11,11 @@ artifacts/
 *.om
 DDK-tools*.zip
 wsl-cann-tools/
+
+# HarmonyOS / DevEco generated files
+demo/.hvigor/
+demo/.idea/
+demo/oh_modules/
+demo/**/.cxx/
+demo/**/build/
+demo/local.properties

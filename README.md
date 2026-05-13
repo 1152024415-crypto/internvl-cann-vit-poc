@@ -72,6 +72,8 @@ uv run internvl-onnx-verify `
 
 ## Stage Docs
 
+- `AGENTS.md`
+- `docs/index.md`
 - `docs/stage-1-model-split-baseline.md`
 - `docs/stage-2-onnx-export.md`
 - `docs/stage-3-onnx-to-om.md`
