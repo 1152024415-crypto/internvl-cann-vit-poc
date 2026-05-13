@@ -61,6 +61,8 @@ Use these files instead of loading every document at once:
 
 ```text
 docs/index.md                         high-level doc index
+docs/current-status.md                current state snapshot
+docs/search-guide.md                  keywords and search commands
 docs/stage-1-model-split-baseline.md  model split and PyTorch baselines
 docs/stage-2-onnx-export.md           ONNX export and ONNX Runtime checks
 docs/stage-3-onnx-to-om.md            OMG conversion and OM notes
@@ -95,6 +97,9 @@ ONNX. The `staticpos` export bypasses it for fixed `448 x 448` input.
 
 `demo/` is the HarmonyOS Native C++ workspace. Generated DevEco/Hvigor folders
 must stay out of git.
+
+Current demo state: blank Native C++ template with sample NAPI `add` function.
+Real CANN/NN runtime inference code is not implemented yet.
 
 The first device validation should use raw fp32 tensor files:
 

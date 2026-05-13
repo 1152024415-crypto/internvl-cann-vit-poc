@@ -74,6 +74,8 @@ uv run internvl-onnx-verify `
 
 - `AGENTS.md`
 - `docs/index.md`
+- `docs/current-status.md`
+- `docs/search-guide.md`
 - `docs/stage-1-model-split-baseline.md`
 - `docs/stage-2-onnx-export.md`
 - `docs/stage-3-onnx-to-om.md`

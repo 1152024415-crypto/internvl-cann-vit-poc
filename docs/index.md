@@ -8,6 +8,7 @@ large instruction file.
 Start here:
 
 ```text
+current-status.md
 stage-4-vit-projector-chain.md
 ```
 
@@ -15,6 +16,12 @@ It describes the current ViT + projector path:
 
 ```text
 image -> vision_model -> pixel_shuffle -> mlp1 -> visual_tokens
+```
+
+For fast lookup, use:
+
+```text
+search-guide.md
 ```
 
 ## Stage Documents
