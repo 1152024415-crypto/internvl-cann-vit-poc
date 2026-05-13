@@ -10,6 +10,8 @@ artifacts/
 *.onnx
 *.om
 *.bin
+demo/entry/src/main/resources/rawfile/*.om
+demo/entry/src/main/resources/rawfile/*.bin
 DDK-tools*.zip
 wsl-cann-tools/
 
