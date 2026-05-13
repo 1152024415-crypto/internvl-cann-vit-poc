@@ -9,13 +9,82 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <sstream>
 
 namespace internvl {
 
 namespace {
 
-const char* kDeviceType = "HIAI_F";
+struct DeviceSelection {
+    bool ok = false;
+    size_t id = 0;
+    std::string label;
+    std::string errorMessage;
+};
+
+const char* DeviceTypeName(OH_NN_DeviceType type)
+{
+    switch (type) {
+        case OH_NN_CPU:
+            return "CPU";
+        case OH_NN_GPU:
+            return "GPU";
+        case OH_NN_ACCELERATOR:
+            return "ACCELERATOR";
+        case OH_NN_OTHERS:
+        default:
+            return "OTHERS";
+    }
+}
+
+std::string MakeDeviceLabel(size_t deviceId)
+{
+    const char* deviceName = nullptr;
+    OH_NN_DeviceType deviceType = OH_NN_OTHERS;
+    const OH_NN_ReturnCode nameCode = OH_NNDevice_GetName(deviceId, &deviceName);
+    const OH_NN_ReturnCode typeCode = OH_NNDevice_GetType(deviceId, &deviceType);
+
+    std::ostringstream label;
+    label << "id=" << deviceId;
+    if (nameCode == OH_NN_SUCCESS && deviceName != nullptr) {
+        label << " name=" << deviceName;
+    }
+    if (typeCode == OH_NN_SUCCESS) {
+        label << " type=" << DeviceTypeName(deviceType);
+    }
+    return label.str();
+}
+
+DeviceSelection SelectDevice()
+{
+    const size_t* deviceIds = nullptr;
+    uint32_t deviceCount = 0;
+    DeviceSelection selection;
+
+    const OH_NN_ReturnCode code = OH_NNDevice_GetAllDevicesID(&deviceIds, &deviceCount);
+    if (code != OH_NN_SUCCESS || deviceIds == nullptr || deviceCount == 0) {
+        selection.errorMessage = "OH_NNDevice_GetAllDevicesID failed";
+        return selection;
+    }
+
+    for (uint32_t index = 0; index < deviceCount; ++index) {
+        OH_NN_DeviceType deviceType = OH_NN_OTHERS;
+        if (OH_NNDevice_GetType(deviceIds[index], &deviceType) == OH_NN_SUCCESS &&
+            deviceType == OH_NN_ACCELERATOR) {
+            selection.ok = true;
+            selection.id = deviceIds[index];
+            selection.label = MakeDeviceLabel(selection.id);
+            return selection;
+        }
+    }
+
+    selection.ok = true;
+    selection.id = deviceIds[0];
+    selection.label = MakeDeviceLabel(selection.id);
+    return selection;
+}
 
 const TestCase* FindCase(const std::string& caseName)
 {
@@ -50,30 +119,49 @@ void DestroyCompilation(OH_NNCompilation** compilation)
     }
 }
 
+void DestroyTensor(NN_Tensor** tensor)
+{
+    if (tensor != nullptr && *tensor != nullptr) {
+        OH_NNTensor_Destroy(tensor);
+    }
+}
+
+void DestroyTensorDesc(NN_TensorDesc** tensorDesc)
+{
+    if (tensorDesc != nullptr && *tensorDesc != nullptr) {
+        OH_NNTensorDesc_Destroy(tensorDesc);
+    }
+}
+
 RunResult RunOfflineModel(const std::string& caseName,
                           const std::vector<std::uint8_t>& modelBytes,
                           const std::vector<std::uint8_t>& inputBytes,
                           std::vector<float>& output,
                           double& latencyMs)
 {
+    DeviceSelection device = SelectDevice();
+    if (!device.ok) {
+        return Fail(caseName, "device_selection_failed", device.errorMessage);
+    }
+
     OH_NNCompilation* compilation = nullptr;
     OH_NNExecutor* executor = nullptr;
+    NN_TensorDesc* inputDesc = nullptr;
+    NN_TensorDesc* outputDesc = nullptr;
+    NN_Tensor* inputTensor = nullptr;
+    NN_Tensor* outputTensor = nullptr;
 
-    // Yellow-zone note: keep all HarmonyOS NN calls in this file. If local SDK
-    // headers expose slightly different signatures, patch this function only.
+    // Keep all HarmonyOS NN calls in this file so SDK compatibility fixes stay isolated.
     const auto start = std::chrono::steady_clock::now();
-    OH_NN_ReturnCode code = OH_NNCompilation_ConstructWithOfflineModelBuffer(
-        modelBytes.data(),
-        modelBytes.size(),
-        &compilation);
-    if (code != OH_NN_SUCCESS || compilation == nullptr) {
+    compilation = OH_NNCompilation_ConstructWithOfflineModelBuffer(modelBytes.data(), modelBytes.size());
+    if (compilation == nullptr) {
         return Fail(caseName, "om_compilation_failed", "OH_NNCompilation_ConstructWithOfflineModelBuffer failed");
     }
 
-    code = OH_NNCompilation_SetDevice(compilation, kDeviceType);
+    OH_NN_ReturnCode code = OH_NNCompilation_SetDevice(compilation, device.id);
     if (code != OH_NN_SUCCESS) {
         DestroyCompilation(&compilation);
-        return Fail(caseName, "device_selection_failed", "OH_NNCompilation_SetDevice(HIAI_F) failed");
+        return Fail(caseName, "device_selection_failed", "OH_NNCompilation_SetDevice failed: " + device.label);
     }
 
     code = OH_NNCompilation_Build(compilation);
@@ -82,28 +170,70 @@ RunResult RunOfflineModel(const std::string& caseName,
         return Fail(caseName, "om_compilation_failed", "OH_NNCompilation_Build failed");
     }
 
-    code = OH_NNExecutor_Construct(compilation, &executor);
-    if (code != OH_NN_SUCCESS || executor == nullptr) {
+    executor = OH_NNExecutor_Construct(compilation);
+    if (executor == nullptr) {
         DestroyCompilation(&compilation);
         return Fail(caseName, "executor_create_failed", "OH_NNExecutor_Construct failed");
     }
 
-    code = OH_NNExecutor_SetInput(executor, 0, inputBytes.data(), inputBytes.size());
-    if (code != OH_NN_SUCCESS) {
+    size_t inputCount = 0;
+    size_t outputCount = 0;
+    code = OH_NNExecutor_GetInputCount(executor, &inputCount);
+    if (code != OH_NN_SUCCESS || inputCount != 1) {
         DestroyExecutor(&executor);
         DestroyCompilation(&compilation);
-        return Fail(caseName, "input_size_mismatch", "OH_NNExecutor_SetInput failed");
+        return Fail(caseName, "input_size_mismatch", "Expected exactly one model input");
     }
-
-    code = OH_NNExecutor_SetOutput(executor, 0, output.data(), kOutputByteCount);
-    if (code != OH_NN_SUCCESS) {
+    code = OH_NNExecutor_GetOutputCount(executor, &outputCount);
+    if (code != OH_NN_SUCCESS || outputCount != 1) {
         DestroyExecutor(&executor);
         DestroyCompilation(&compilation);
-        return Fail(caseName, "output_size_mismatch", "OH_NNExecutor_SetOutput failed");
+        return Fail(caseName, "output_size_mismatch", "Expected exactly one model output");
     }
 
-    code = OH_NNExecutor_RunSync(executor);
+    inputDesc = OH_NNExecutor_CreateInputTensorDesc(executor, 0);
+    outputDesc = OH_NNExecutor_CreateOutputTensorDesc(executor, 0);
+    if (inputDesc == nullptr || outputDesc == nullptr) {
+        DestroyTensorDesc(&outputDesc);
+        DestroyTensorDesc(&inputDesc);
+        DestroyExecutor(&executor);
+        DestroyCompilation(&compilation);
+        return Fail(caseName, "executor_create_failed", "Failed to create input or output tensor descriptors");
+    }
 
+    inputTensor = OH_NNTensor_CreateWithSize(device.id, inputDesc, kInputByteCount);
+    outputTensor = OH_NNTensor_CreateWithSize(device.id, outputDesc, kOutputByteCount);
+    DestroyTensorDesc(&outputDesc);
+    DestroyTensorDesc(&inputDesc);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        DestroyTensor(&outputTensor);
+        DestroyTensor(&inputTensor);
+        DestroyExecutor(&executor);
+        DestroyCompilation(&compilation);
+        return Fail(caseName, "executor_create_failed", "Failed to create input or output tensors");
+    }
+
+    void* inputBuffer = OH_NNTensor_GetDataBuffer(inputTensor);
+    void* outputBuffer = OH_NNTensor_GetDataBuffer(outputTensor);
+    if (inputBuffer == nullptr || outputBuffer == nullptr) {
+        DestroyTensor(&outputTensor);
+        DestroyTensor(&inputTensor);
+        DestroyExecutor(&executor);
+        DestroyCompilation(&compilation);
+        return Fail(caseName, "executor_create_failed", "Failed to get tensor data buffers");
+    }
+
+    std::memcpy(inputBuffer, inputBytes.data(), kInputByteCount);
+    NN_Tensor* inputTensors[] = {inputTensor};
+    NN_Tensor* outputTensors[] = {outputTensor};
+    code = OH_NNExecutor_RunSync(executor, inputTensors, 1, outputTensors, 1);
+
+    if (code == OH_NN_SUCCESS) {
+        std::memcpy(output.data(), outputBuffer, kOutputByteCount);
+    }
+
+    DestroyTensor(&outputTensor);
+    DestroyTensor(&inputTensor);
     DestroyExecutor(&executor);
     DestroyCompilation(&compilation);
 
@@ -116,7 +246,7 @@ RunResult RunOfflineModel(const std::string& caseName,
     RunResult result;
     result.ok = true;
     result.caseName = caseName;
-    result.deviceType = kDeviceType;
+    result.deviceType = device.label;
     result.latencyMs = latencyMs;
     result.outputElementCount = output.size();
     return result;
@@ -175,7 +305,7 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
     RunResult result;
     result.ok = metrics.ok;
     result.caseName = caseName;
-    result.deviceType = kDeviceType;
+    result.deviceType = runResult.deviceType;
     result.errorStage = metrics.errorStage;
     result.errorMessage = metrics.errorMessage;
     result.latencyMs = latencyMs;

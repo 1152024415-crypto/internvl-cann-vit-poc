@@ -10,6 +10,15 @@
 
 ---
 
+## Post-Implementation Note
+
+During centralized review, the Task 6 NN runtime adapter was corrected against
+the local DevEco `neural_network_runtime/neural_network_core.h` header. The
+checked-in implementation uses pointer-returning offline compilation and
+executor construction APIs, device IDs from `OH_NNDevice_GetAllDevicesID`, and
+`NN_Tensor*` arrays passed directly to `OH_NNExecutor_RunSync`. The source code
+is authoritative if it differs from the earlier Task 6 draft snippet below.
+
 ## Scope Check
 
 This plan implements one coherent milestone: raw tensor validation for the existing static fp32 ViT + projector OM.

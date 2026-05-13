@@ -57,8 +57,16 @@ template.
 8. Run the 20-run Dog/Cat stability validation and record the success counts and
 average latencies in the Device Results template.
 
-If yellow-zone compilation fails because the NN API signatures differ from the
-current checked-in assumptions, isolate the compatibility patch to:
+During blue-zone review, the NN runtime adapter was checked against the local
+DevEco header:
+
+```text
+neural_network_runtime/neural_network_core.h
+```
+
+The checked-in adapter uses the current `OH_NNCompilation_*`, `OH_NNTensor_*`,
+and `OH_NNExecutor_RunSync` signatures from that header. If the yellow-zone SDK
+still differs, isolate the compatibility patch to:
 
 ```text
 demo/entry/src/main/cpp/validation/nn_runtime_validator.cpp
