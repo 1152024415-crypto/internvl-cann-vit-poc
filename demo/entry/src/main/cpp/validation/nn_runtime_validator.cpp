@@ -24,6 +24,11 @@ struct DeviceSelection {
     std::string errorMessage;
 };
 
+struct OutputShapeCheck {
+    bool ok = false;
+    std::string shape;
+};
+
 const char* DeviceTypeName(OH_NN_DeviceType type)
 {
     switch (type) {
@@ -133,17 +138,69 @@ void DestroyTensorDesc(NN_TensorDesc** tensorDesc)
     }
 }
 
-bool OutputShapeMatchesExpected(OH_NNExecutor* executor)
+std::string ShapeToString(const int32_t* shape, uint32_t shapeLength)
+{
+    if (shape == nullptr) {
+        return "unavailable";
+    }
+
+    std::ostringstream stream;
+    stream << "[";
+    for (uint32_t index = 0; index < shapeLength; ++index) {
+        if (index > 0) {
+            stream << ",";
+        }
+        stream << shape[index];
+    }
+    stream << "]";
+    return stream.str();
+}
+
+OutputShapeCheck CheckOutputShape(OH_NNExecutor* executor)
 {
     int32_t* outputShape = nullptr;
     uint32_t shapeLength = 0;
     const OH_NN_ReturnCode code = OH_NNExecutor_GetOutputShape(executor, 0, &outputShape, &shapeLength);
+    OutputShapeCheck result;
     if (code != OH_NN_SUCCESS || outputShape == nullptr || shapeLength != 3) {
-        return false;
+        result.shape = ShapeToString(outputShape, shapeLength);
+        return result;
     }
-    return outputShape[0] == static_cast<int32_t>(kOutputN) &&
-           outputShape[1] == static_cast<int32_t>(kOutputTokenCount) &&
-           outputShape[2] == static_cast<int32_t>(kOutputHiddenSize);
+    result.shape = ShapeToString(outputShape, shapeLength);
+    result.ok = outputShape[0] == static_cast<int32_t>(kOutputN) &&
+                outputShape[1] == static_cast<int32_t>(kOutputTokenCount) &&
+                outputShape[2] == static_cast<int32_t>(kOutputHiddenSize);
+    return result;
+}
+
+bool ContainsText(const std::string& text, const std::string& expected)
+{
+    return text.find(expected) != std::string::npos;
+}
+
+MetricsResult ValidateMetadata(const std::vector<std::uint8_t>& metadataBytes, const TestCase& testCase)
+{
+    MetricsResult result;
+    const std::string metadata(metadataBytes.begin(), metadataBytes.end());
+    const std::string caseFragment = "\"case_name\": \"" + std::string(testCase.name) + "\"";
+
+    const bool valid = ContainsText(metadata, caseFragment) &&
+                       ContainsText(metadata, kModelFile) &&
+                       ContainsText(metadata, testCase.inputFile) &&
+                       ContainsText(metadata, testCase.expectedOutputFile) &&
+                       ContainsText(metadata, "\"byte_count\": 2408448") &&
+                       ContainsText(metadata, "\"byte_count\": 1048576") &&
+                       ContainsText(metadata, "\"cosine_min\": 0.999") &&
+                       ContainsText(metadata, "\"mean_abs_diff_max\": 0.01");
+    if (valid) {
+        result.ok = true;
+        result.finite = true;
+        return result;
+    }
+
+    result.errorStage = "metadata_mismatch";
+    result.errorMessage = "Validation metadata content does not match expected case artifacts";
+    return result;
 }
 
 RunResult RunOfflineModel(const std::string& caseName,
@@ -244,7 +301,7 @@ RunResult RunOfflineModel(const std::string& caseName,
     if (code == OH_NN_SUCCESS) {
         std::memcpy(output.data(), outputBuffer, kOutputByteCount);
     }
-    const bool outputShapeOk = code == OH_NN_SUCCESS && OutputShapeMatchesExpected(executor);
+    OutputShapeCheck outputShape = code == OH_NN_SUCCESS ? CheckOutputShape(executor) : OutputShapeCheck{};
 
     DestroyTensor(&outputTensor);
     DestroyTensor(&inputTensor);
@@ -256,8 +313,10 @@ RunResult RunOfflineModel(const std::string& caseName,
     if (code != OH_NN_SUCCESS) {
         return Fail(caseName, "run_sync_failed", "OH_NNExecutor_RunSync failed");
     }
-    if (!outputShapeOk) {
-        return Fail(caseName, "output_size_mismatch", "Runtime output shape is not [1,256,1024]");
+    if (!outputShape.ok) {
+        RunResult result = Fail(caseName, "output_size_mismatch", "Runtime output shape is not [1,256,1024]");
+        result.outputShape = outputShape.shape;
+        return result;
     }
 
     RunResult result;
@@ -267,6 +326,7 @@ RunResult RunOfflineModel(const std::string& caseName,
     result.latencyMs = latencyMs;
     result.outputElementCount = output.size();
     result.outputShapeOk = true;
+    result.outputShape = outputShape.shape;
     return result;
 }
 
@@ -313,6 +373,11 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
     if (!metadataBytes.ok) {
         return Fail(caseName, metadataBytes.errorStage, metadataBytes.errorMessage);
     }
+    MetricsResult metadataResult = ValidateMetadata(metadataBytes.bytes, *testCase);
+    if (!metadataResult.ok) {
+        RunResult result = Fail(caseName, metadataResult.errorStage, metadataResult.errorMessage);
+        return result;
+    }
 
     std::vector<float> output(kOutputElementCount, 0.0f);
     double latencyMs = 0.0;
@@ -337,6 +402,7 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
     result.cosine = metrics.cosine;
     result.finite = metrics.finite;
     result.outputShapeOk = runResult.outputShapeOk;
+    result.outputShape = runResult.outputShape;
     return result;
 }
 

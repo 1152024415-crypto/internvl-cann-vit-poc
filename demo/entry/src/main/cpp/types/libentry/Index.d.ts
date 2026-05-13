@@ -11,6 +11,7 @@ export interface RunResult {
   cosine: number;
   finite: boolean;
   outputShapeOk: boolean;
+  outputShape: string;
 }
 
 export interface StabilityResult {

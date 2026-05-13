@@ -7,8 +7,8 @@ const TAG = 'InternVLValidation';
 @Entry
 @Component
 struct Index {
-  @State selectedCase: string = 'dog';
-  @State cases: string[] = ['dog', 'cat'];
+  @State selectedCase: string = '';
+  @State cases: string[] = [];
   @State status: string = 'Ready';
   @State runText: string = '';
   @State stabilityText: string = '';
@@ -35,6 +35,7 @@ struct Index {
       `device: ${result.deviceType}`,
       `latency: ${result.latencyMs} ms`,
       `output_elements: ${result.outputElementCount}`,
+      `output_shape: ${result.outputShape}`,
       `output_shape_ok: ${result.outputShapeOk}`,
       `finite: ${result.finite}`,
       `cosine: ${result.cosine}`,
@@ -63,6 +64,11 @@ struct Index {
   }
 
   runOnce(): void {
+    if (this.selectedCase.length === 0) {
+      this.status = 'No native test case available';
+      return;
+    }
+
     this.status = `Running single ${this.selectedCase} case...`;
     try {
       const result = testNapi.runOnce(getContext(this).resourceManager, this.selectedCase);
@@ -78,6 +84,11 @@ struct Index {
   }
 
   runStability(): void {
+    if (this.selectedCase.length === 0) {
+      this.status = 'No native test case available';
+      return;
+    }
+
     this.status = `Running 20x ${this.selectedCase} stability...`;
     try {
       const result = testNapi.runStability(getContext(this).resourceManager, this.selectedCase, 20);

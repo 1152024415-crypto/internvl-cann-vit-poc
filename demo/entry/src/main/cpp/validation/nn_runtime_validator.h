@@ -21,6 +21,7 @@ struct RunResult {
     double cosine = 0.0;
     bool finite = false;
     bool outputShapeOk = false;
+    std::string outputShape;
 };
 
 struct StabilityResult {

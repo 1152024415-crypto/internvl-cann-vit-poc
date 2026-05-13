@@ -45,6 +45,7 @@ napi_value ToNapiValue(napi_env env, const RunResult& result)
     SetNumber(env, object, "cosine", result.cosine);
     SetBool(env, object, "finite", result.finite);
     SetBool(env, object, "outputShapeOk", result.outputShapeOk);
+    SetString(env, object, "outputShape", result.outputShape);
     return object;
 }
 

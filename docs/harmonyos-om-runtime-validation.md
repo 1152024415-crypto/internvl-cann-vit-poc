@@ -97,6 +97,11 @@ The small `dog.metadata.json` and `cat.metadata.json` files are tracked in the
 rawfile directory. They are also safe to replace with freshly generated release
 metadata if the validation tensors are regenerated.
 
+The native validator reads these metadata files at runtime and checks that they
+match the selected case, expected model file, tensor file names, byte counts, and
+initial numeric thresholds. The validator also queries the actual NN runtime
+output shape after `RunSync` and reports it in the UI.
+
 ## Expected Shapes
 
 ```text
