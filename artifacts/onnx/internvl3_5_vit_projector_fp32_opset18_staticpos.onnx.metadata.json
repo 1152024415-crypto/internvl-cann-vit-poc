@@ -1,0 +1,26 @@
+{
+  "model_id": "OpenGVLab/InternVL3_5-1B-Instruct",
+  "revision": "5648fa26ff23acaba53588936d9f1dfaf305f522",
+  "image_path": "data\\test-images\\dog.jpg",
+  "output_path": "artifacts\\onnx\\internvl3_5_vit_projector_fp32_opset18_staticpos.onnx",
+  "target": "projector",
+  "dtype": "fp32",
+  "device": "cpu",
+  "opset": 18,
+  "input_name": "pixel_values",
+  "output_name": "visual_tokens",
+  "input_shape": [
+    1,
+    3,
+    448,
+    448
+  ],
+  "output_shape": [
+    1,
+    256,
+    1024
+  ],
+  "dynamic_axes": false,
+  "static_position_embedding": true,
+  "created_at_utc": "2026-05-13T03:42:08.588984+00:00"
+}
