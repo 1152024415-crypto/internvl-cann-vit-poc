@@ -13,6 +13,10 @@ include_directories(${NATIVERENDER_ROOT_PATH}
 
 add_library(entry SHARED
     napi_init.cpp
+    validation/rawfile_loader.cpp
     validation/tensor_metrics.cpp
 )
-target_link_libraries(entry PUBLIC libace_napi.z.so)
+target_link_libraries(entry PUBLIC
+    libace_napi.z.so
+    librawfile.z.so
+)
