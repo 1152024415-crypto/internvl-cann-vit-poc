@@ -47,6 +47,16 @@ demo/entry/src/main/resources/rawfile/dog.metadata.json
 demo/entry/src/main/resources/rawfile/cat.metadata.json
 ```
 
+Validation `.bin` tensors are also tracked because they are small enough for git
+and make yellow-zone validation simpler:
+
+```text
+demo/entry/src/main/resources/rawfile/dog_pixel_values_fp32.bin
+demo/entry/src/main/resources/rawfile/dog_visual_tokens_fp32.bin
+demo/entry/src/main/resources/rawfile/cat_pixel_values_fp32.bin
+demo/entry/src/main/resources/rawfile/cat_visual_tokens_fp32.bin
+```
+
 Do not commit:
 
 ```text

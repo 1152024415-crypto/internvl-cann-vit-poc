@@ -24,7 +24,7 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.onnx
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
 
-The yellow-zone runtime demo also needs these raw fp32 validation tensors:
+The yellow-zone runtime demo also uses these raw fp32 validation tensors:
 
 ```text
 dog_pixel_values_fp32.bin
@@ -33,48 +33,39 @@ cat_pixel_values_fp32.bin
 cat_visual_tokens_fp32.bin
 ```
 
-These `.bin` files are generated locally under:
+These `.bin` files are tracked in git under:
 
 ```text
-artifacts/validation-tensors/
+demo/entry/src/main/resources/rawfile/
 ```
 
-They are intentionally ignored by git. Before yellow-zone validation, upload the
-four `.bin` files to the same GitHub Release or move them through an approved
-file-transfer channel.
-
-The small metadata files are already tracked in the repo:
+The small metadata files are tracked in the same directory:
 
 ```text
 demo/entry/src/main/resources/rawfile/dog.metadata.json
 demo/entry/src/main/resources/rawfile/cat.metadata.json
 ```
 
-## Step 0: Prepare Release Assets In Blue Zone
+## Step 0: Check Tracked Validation Tensors
 
-If the four validation `.bin` files are not already attached to the Release,
-upload them from the blue-zone machine.
-
-Open this Release page:
+After `git pull`, these files should already exist:
 
 ```text
-https://github.com/1152024415-crypto/internvl-cann-vit-poc/releases/tag/v0.1.0-artifacts
-```
-
-Edit the Release and attach:
-
-```text
-artifacts/validation-tensors/dog_pixel_values_fp32.bin
-artifacts/validation-tensors/dog_visual_tokens_fp32.bin
-artifacts/validation-tensors/cat_pixel_values_fp32.bin
-artifacts/validation-tensors/cat_visual_tokens_fp32.bin
-```
-
-If the tensors are regenerated, also update:
-
-```text
+demo/entry/src/main/resources/rawfile/dog_pixel_values_fp32.bin
+demo/entry/src/main/resources/rawfile/dog_visual_tokens_fp32.bin
+demo/entry/src/main/resources/rawfile/cat_pixel_values_fp32.bin
+demo/entry/src/main/resources/rawfile/cat_visual_tokens_fp32.bin
 demo/entry/src/main/resources/rawfile/dog.metadata.json
 demo/entry/src/main/resources/rawfile/cat.metadata.json
+```
+
+Expected binary sizes:
+
+```text
+dog_pixel_values_fp32.bin    2408448 bytes
+cat_pixel_values_fp32.bin    2408448 bytes
+dog_visual_tokens_fp32.bin   1048576 bytes
+cat_visual_tokens_fp32.bin   1048576 bytes
 ```
 
 The tracked metadata contains SHA256 values for the current tensor set. If the
@@ -95,7 +86,7 @@ If the repo already exists:
 git pull origin main
 ```
 
-## Step 2: Download Runtime Assets
+## Step 2: Download The OM Runtime Asset
 
 Create the rawfile directory:
 
@@ -103,24 +94,21 @@ Create the rawfile directory:
 New-Item -ItemType Directory -Force demo\entry\src\main\resources\rawfile
 ```
 
-Download these files from the Release:
+Download this file from the Release:
 
 ```text
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
-dog_pixel_values_fp32.bin
-dog_visual_tokens_fp32.bin
-cat_pixel_values_fp32.bin
-cat_visual_tokens_fp32.bin
 ```
 
-Put them here:
+Put it here:
 
 ```text
 demo/entry/src/main/resources/rawfile/
 ```
 
 Do not put the ONNX file in the HarmonyOS app. The device demo loads the `.om`
-file only.
+file only. The `.bin` and `.metadata.json` files should already be present from
+git.
 
 Optional PowerShell download helper:
 
@@ -131,11 +119,7 @@ $dest = "demo\entry\src\main\resources\rawfile"
 New-Item -ItemType Directory -Force $dest | Out-Null
 
 $required = @(
-  "internvl3_5_vit_projector_fp32_opset18_staticpos.om",
-  "dog_pixel_values_fp32.bin",
-  "dog_visual_tokens_fp32.bin",
-  "cat_pixel_values_fp32.bin",
-  "cat_visual_tokens_fp32.bin"
+  "internvl3_5_vit_projector_fp32_opset18_staticpos.om"
 )
 
 $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/tags/$tag"

@@ -43,8 +43,21 @@ does not print the token.
 
 ## Validation Tensor Assets
 
-The HarmonyOS runtime validation also needs raw fp32 tensor files. They are not
-tracked by git because they are binary release artifacts.
+The HarmonyOS runtime validation also needs raw fp32 tensor files. The four
+current validation `.bin` files are tracked in git under:
+
+```text
+demo/entry/src/main/resources/rawfile/
+```
+
+They are small enough to keep in source control:
+
+```text
+dog_pixel_values_fp32.bin     2408448 bytes
+dog_visual_tokens_fp32.bin    1048576 bytes
+cat_pixel_values_fp32.bin     2408448 bytes
+cat_visual_tokens_fp32.bin    1048576 bytes
+```
 
 Generate them with:
 
@@ -55,15 +68,18 @@ uv run internvl-export-validation-tensors `
   --case cat=data\test-images\cat.jpg,artifacts\baseline-projector-cat\baseline_output.pt
 ```
 
-Upload these files to the same GitHub Release as the OM:
+After regenerating, copy these files into the demo rawfile directory and commit
+them with the matching metadata:
 
 ```text
 dog_pixel_values_fp32.bin
 dog_visual_tokens_fp32.bin
 cat_pixel_values_fp32.bin
 cat_visual_tokens_fp32.bin
+dog.metadata.json
+cat.metadata.json
 ```
 
 The small `dog.metadata.json` and `cat.metadata.json` files are tracked under
-`demo/entry/src/main/resources/rawfile/` for the current tensor set. Re-upload
-or update them only when regenerating the validation tensors.
+`demo/entry/src/main/resources/rawfile/` for the current tensor set. Update them
+only when regenerating the validation tensors.
