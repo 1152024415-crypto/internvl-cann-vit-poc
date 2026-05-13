@@ -83,10 +83,8 @@ Download these files in the yellow-zone environment:
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
 dog_pixel_values_fp32.bin
 dog_visual_tokens_fp32.bin
-dog.metadata.json
 cat_pixel_values_fp32.bin
 cat_visual_tokens_fp32.bin
-cat.metadata.json
 ```
 
 Put them in:
@@ -94,6 +92,10 @@ Put them in:
 ```text
 demo/entry/src/main/resources/rawfile/
 ```
+
+The small `dog.metadata.json` and `cat.metadata.json` files are tracked in the
+rawfile directory. They are also safe to replace with freshly generated release
+metadata if the validation tensors are regenerated.
 
 ## Expected Shapes
 

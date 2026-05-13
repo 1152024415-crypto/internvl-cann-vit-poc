@@ -133,6 +133,19 @@ void DestroyTensorDesc(NN_TensorDesc** tensorDesc)
     }
 }
 
+bool OutputShapeMatchesExpected(OH_NNExecutor* executor)
+{
+    int32_t* outputShape = nullptr;
+    uint32_t shapeLength = 0;
+    const OH_NN_ReturnCode code = OH_NNExecutor_GetOutputShape(executor, 0, &outputShape, &shapeLength);
+    if (code != OH_NN_SUCCESS || outputShape == nullptr || shapeLength != 3) {
+        return false;
+    }
+    return outputShape[0] == static_cast<int32_t>(kOutputN) &&
+           outputShape[1] == static_cast<int32_t>(kOutputTokenCount) &&
+           outputShape[2] == static_cast<int32_t>(kOutputHiddenSize);
+}
+
 RunResult RunOfflineModel(const std::string& caseName,
                           const std::vector<std::uint8_t>& modelBytes,
                           const std::vector<std::uint8_t>& inputBytes,
@@ -231,6 +244,7 @@ RunResult RunOfflineModel(const std::string& caseName,
     if (code == OH_NN_SUCCESS) {
         std::memcpy(output.data(), outputBuffer, kOutputByteCount);
     }
+    const bool outputShapeOk = code == OH_NN_SUCCESS && OutputShapeMatchesExpected(executor);
 
     DestroyTensor(&outputTensor);
     DestroyTensor(&inputTensor);
@@ -242,6 +256,9 @@ RunResult RunOfflineModel(const std::string& caseName,
     if (code != OH_NN_SUCCESS) {
         return Fail(caseName, "run_sync_failed", "OH_NNExecutor_RunSync failed");
     }
+    if (!outputShapeOk) {
+        return Fail(caseName, "output_size_mismatch", "Runtime output shape is not [1,256,1024]");
+    }
 
     RunResult result;
     result.ok = true;
@@ -249,6 +266,7 @@ RunResult RunOfflineModel(const std::string& caseName,
     result.deviceType = device.label;
     result.latencyMs = latencyMs;
     result.outputElementCount = output.size();
+    result.outputShapeOk = true;
     return result;
 }
 
@@ -291,6 +309,10 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
         return Fail(caseName, "output_size_mismatch",
                     "Expected output rawfile byte count does not match [1,256,1024] fp32");
     }
+    auto metadataBytes = ReadRawfile(env, resourceManager, testCase->metadataFile);
+    if (!metadataBytes.ok) {
+        return Fail(caseName, metadataBytes.errorStage, metadataBytes.errorMessage);
+    }
 
     std::vector<float> output(kOutputElementCount, 0.0f);
     double latencyMs = 0.0;
@@ -314,6 +336,7 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
     result.meanAbsDiff = metrics.meanAbsDiff;
     result.cosine = metrics.cosine;
     result.finite = metrics.finite;
+    result.outputShapeOk = runResult.outputShapeOk;
     return result;
 }
 

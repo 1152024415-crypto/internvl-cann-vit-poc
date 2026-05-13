@@ -20,6 +20,7 @@ struct RunResult {
     double meanAbsDiff = 0.0;
     double cosine = 0.0;
     bool finite = false;
+    bool outputShapeOk = false;
 };
 
 struct StabilityResult {

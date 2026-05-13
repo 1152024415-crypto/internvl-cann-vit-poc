@@ -60,8 +60,10 @@ Upload these files to the same GitHub Release as the OM:
 ```text
 dog_pixel_values_fp32.bin
 dog_visual_tokens_fp32.bin
-dog.metadata.json
 cat_pixel_values_fp32.bin
 cat_visual_tokens_fp32.bin
-cat.metadata.json
 ```
+
+The small `dog.metadata.json` and `cat.metadata.json` files are tracked under
+`demo/entry/src/main/resources/rawfile/` for the current tensor set. Re-upload
+or update them only when regenerating the validation tensors.

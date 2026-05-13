@@ -10,6 +10,7 @@ export interface RunResult {
   meanAbsDiff: number;
   cosine: number;
   finite: boolean;
+  outputShapeOk: boolean;
 }
 
 export interface StabilityResult {

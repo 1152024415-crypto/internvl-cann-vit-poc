@@ -13,3 +13,6 @@ this directory:
 
 The `.om` and `.bin` files are large release artifacts. Do not commit them to
 git; fetch them from the release payload before building.
+
+The `.metadata.json` files are small and tracked here so the demo can fail
+clearly if expected validation case metadata is missing.

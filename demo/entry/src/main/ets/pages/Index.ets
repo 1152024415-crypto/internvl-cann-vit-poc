@@ -8,9 +8,25 @@ const TAG = 'InternVLValidation';
 @Component
 struct Index {
   @State selectedCase: string = 'dog';
+  @State cases: string[] = ['dog', 'cat'];
   @State status: string = 'Ready';
   @State runText: string = '';
   @State stabilityText: string = '';
+
+  aboutToAppear(): void {
+    try {
+      const nativeCases = testNapi.listTestCases();
+      if (nativeCases.length > 0) {
+        this.cases = nativeCases;
+        this.selectedCase = nativeCases[0];
+      }
+    } catch (error) {
+      const message = `${error}`;
+      this.status = 'Failed to list native test cases';
+      this.runText = message;
+      hilog.error(DOMAIN, TAG, 'listTestCases error: %{public}s', message);
+    }
+  }
 
   formatRun(result: RunResult): string {
     return [
@@ -19,6 +35,7 @@ struct Index {
       `device: ${result.deviceType}`,
       `latency: ${result.latencyMs} ms`,
       `output_elements: ${result.outputElementCount}`,
+      `output_shape_ok: ${result.outputShapeOk}`,
       `finite: ${result.finite}`,
       `cosine: ${result.cosine}`,
       `mean_abs_diff: ${result.meanAbsDiff}`,
@@ -83,17 +100,13 @@ struct Index {
         .width('100%')
 
       Row({ space: 12 }) {
-        Button('Dog')
-          .onClick(() => {
-            this.selectedCase = 'dog';
-            this.status = 'Ready';
-          })
-
-        Button('Cat')
-          .onClick(() => {
-            this.selectedCase = 'cat';
-            this.status = 'Ready';
-          })
+        ForEach(this.cases, (caseName: string) => {
+          Button(caseName)
+            .onClick(() => {
+              this.selectedCase = caseName;
+              this.status = 'Ready';
+            })
+        }, (caseName: string) => caseName)
       }
       .width('100%')
 
