@@ -76,3 +76,4 @@ uv run internvl-onnx-verify `
 - `docs/stage-2-onnx-export.md`
 - `docs/stage-3-onnx-to-om.md`
 - `docs/stage-4-vit-projector-chain.md`
+- `docs/release-artifacts.md`
