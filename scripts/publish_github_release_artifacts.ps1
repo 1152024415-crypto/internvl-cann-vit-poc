@@ -47,7 +47,7 @@ function Upload-ReleaseAsset {
     )
 
     $escapedName = [System.Uri]::EscapeDataString($Name)
-    $uploadUri = "$UploadBaseUrl?name=$escapedName"
+    $uploadUri = "${UploadBaseUrl}?name=$escapedName"
     $uploadHeaders = $Headers.Clone()
     $uploadHeaders["Content-Type"] = "application/octet-stream"
 
