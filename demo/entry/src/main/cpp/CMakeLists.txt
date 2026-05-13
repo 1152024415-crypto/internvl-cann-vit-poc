@@ -15,8 +15,12 @@ add_library(entry SHARED
     napi_init.cpp
     validation/rawfile_loader.cpp
     validation/tensor_metrics.cpp
+    validation/nn_runtime_validator.cpp
+    validation/napi_result.cpp
 )
 target_link_libraries(entry PUBLIC
     libace_napi.z.so
     librawfile.z.so
+    libneural_network_core.so
+    libhiai_foundation.so
 )
