@@ -40,3 +40,28 @@ powershell -ExecutionPolicy Bypass -File scripts\publish_github_release_artifact
 
 The script uses the GitHub token available through Git Credential Manager and
 does not print the token.
+
+## Validation Tensor Assets
+
+The HarmonyOS runtime validation also needs raw fp32 tensor files. They are not
+tracked by git because they are binary release artifacts.
+
+Generate them with:
+
+```powershell
+uv run internvl-export-validation-tensors `
+  --output-dir artifacts\validation-tensors `
+  --case dog=data\test-images\dog.jpg,artifacts\baseline-projector-dog\baseline_output.pt `
+  --case cat=data\test-images\cat.jpg,artifacts\baseline-projector-cat\baseline_output.pt
+```
+
+Upload these files to the same GitHub Release as the OM:
+
+```text
+dog_pixel_values_fp32.bin
+dog_visual_tokens_fp32.bin
+dog.metadata.json
+cat_pixel_values_fp32.bin
+cat_visual_tokens_fp32.bin
+cat.metadata.json
+```
