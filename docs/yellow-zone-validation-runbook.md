@@ -173,6 +173,16 @@ HarmonyOS SDK/CANN-capable setup.
 
 Use a physical HarmonyOS device. Do not use an emulator for this validation.
 
+The demo native build is intentionally limited to:
+
+```text
+arm64-v8a
+```
+
+This validation targets phone-side NN runtime / NPU execution. The x86_64
+emulator path is not a valid NPU validation target and may not ship the same
+HiAI/CANN runtime libraries.
+
 Build and run the `entry` module from DevEco Studio.
 
 The app packages these rawfile assets into the HAP:
@@ -325,6 +335,21 @@ git push origin main
 ```text
 The app cannot find a rawfile. Check file names and location:
 demo/entry/src/main/resources/rawfile/
+```
+
+`unable to find library -lhiai_foundation`
+
+```text
+The native linker could not find libhiai_foundation.so for the current SDK/ABI.
+This is a build/link configuration issue, not an OM conversion issue.
+
+The demo links libneural_network_core.so directly and treats
+libhiai_foundation.so as optional because the checked-in native code only calls
+OH_NN* APIs from neural_network_core. Keep the build target on arm64-v8a and
+run on a physical device.
+
+If DevEco still tries to build x86_64 after git pull, clean the project or
+delete stale native build output under demo/entry.cxx and demo/entry/build.
 ```
 
 `metadata_mismatch`

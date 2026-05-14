@@ -119,6 +119,12 @@ runOnce(resourceManager, caseName)
 runStability(resourceManager, caseName, repeatCount)
 ```
 
+The native target is `arm64-v8a` only. This PoC validates physical-phone NN
+runtime / NPU behavior, not x86_64 emulator behavior.
+
+The demo links `libneural_network_core.so` for `OH_NN*` APIs. Treat
+`libhiai_foundation.so` as optional if the SDK exposes it for the active ABI.
+
 The first device validation should use raw fp32 tensor files:
 
 ```text

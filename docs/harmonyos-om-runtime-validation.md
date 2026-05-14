@@ -29,7 +29,7 @@ cd internvl-cann-vit-poc
 If the repository already exists, update it to the intended commit or release
 branch before opening DevEco Studio.
 
-2. Download the release assets listed below from the project release page or the
+2. Download the `.om` asset listed below from the project release page or the
 approved artifact location.
 
 3. Place every downloaded asset in:
@@ -75,32 +75,50 @@ demo/entry/src/main/cpp/validation/nn_runtime_validator.cpp
 Do not mix NN API compatibility edits with release asset changes or unrelated
 demo changes.
 
-## Required Release Assets
+## Required Runtime Assets
 
-Download these files in the yellow-zone environment:
+Download this file in the yellow-zone environment:
 
 ```text
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
-dog_pixel_values_fp32.bin
-dog_visual_tokens_fp32.bin
-cat_pixel_values_fp32.bin
-cat_visual_tokens_fp32.bin
 ```
 
-Put them in:
+Put it in:
 
 ```text
 demo/entry/src/main/resources/rawfile/
 ```
 
-The small `dog.metadata.json` and `cat.metadata.json` files are tracked in the
-rawfile directory. They are also safe to replace with freshly generated release
-metadata if the validation tensors are regenerated.
+The validation `.bin` files and small metadata files are tracked in git under
+the same rawfile directory:
+
+```text
+dog_pixel_values_fp32.bin
+dog_visual_tokens_fp32.bin
+dog.metadata.json
+cat_pixel_values_fp32.bin
+cat_visual_tokens_fp32.bin
+cat.metadata.json
+```
+
+They are safe to replace with freshly generated tensors and metadata if the
+validation set is regenerated, but the `.bin` and `.metadata.json` files must
+always match each other.
 
 The native validator reads these metadata files at runtime and checks that they
 match the selected case, expected model file, tensor file names, byte counts, and
 initial numeric thresholds. The validator also queries the actual NN runtime
 output shape after `RunSync` and reports it in the UI.
+
+## Build Notes
+
+The native build is limited to `arm64-v8a` because this validation is meant for
+a physical HarmonyOS phone with NN runtime / NPU support. Do not use x86_64
+emulator results as OM runtime validation results.
+
+`libhiai_foundation.so` is not linked as a required library. The native code
+calls `OH_NN*` APIs from `libneural_network_core.so`; `libhiai_foundation.so` is
+linked only if the SDK provides it for the active ABI.
 
 ## Expected Shapes
 

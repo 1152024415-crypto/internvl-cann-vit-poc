@@ -18,9 +18,24 @@ add_library(entry SHARED
     validation/nn_runtime_validator.cpp
     validation/napi_result.cpp
 )
-target_link_libraries(entry PUBLIC
+
+set(ENTRY_LINK_LIBS
     libace_napi.z.so
     librawfile.z.so
     libneural_network_core.so
-    libhiai_foundation.so
+)
+
+find_library(HIAI_FOUNDATION_LIBRARY
+    NAMES hiai_foundation libhiai_foundation.so
+)
+
+if(HIAI_FOUNDATION_LIBRARY)
+    message(STATUS "Linking optional HiAI foundation library: ${HIAI_FOUNDATION_LIBRARY}")
+    list(APPEND ENTRY_LINK_LIBS ${HIAI_FOUNDATION_LIBRARY})
+else()
+    message(STATUS "Optional HiAI foundation library not found; relying on libneural_network_core.so")
+endif()
+
+target_link_libraries(entry PUBLIC
+    ${ENTRY_LINK_LIBS}
 )
