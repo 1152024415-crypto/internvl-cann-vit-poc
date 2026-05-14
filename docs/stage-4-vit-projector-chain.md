@@ -194,7 +194,7 @@ File size:
 SHA256:
 
 ```text
-33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
+8D081689805763B786BE003B5627061DFB9324EDF3DF7DF0226C8F5A9C093FA7
 ```
 
 Conversion log:
@@ -213,6 +213,23 @@ AI_NPUCL lines = 21
 CPUCL lines = 0
 partition type NPU:0 lines = 0
 ```
+
+Linux static validation:
+
+```text
+OMG --mode 3 pre-check report = success
+pre-check pass = 1096
+pre-check fail = 0
+OMG --mode 1 OM to JSON = success
+OM JSON op count = 1167
+OM JSON input = pixel_values [1, 3, 448, 448]
+OM JSON output = Node_Output [1, 256, 1024]
+```
+
+`omg --mode 3` currently returns process exit code 1 even when the generated
+pre-check report says `result=success` and `fail=0`. We use the report contents
+for the ONNX/operator support check, then require OM-to-JSON to exit
+successfully for the generated OM file check.
 
 ## Verification Limits
 

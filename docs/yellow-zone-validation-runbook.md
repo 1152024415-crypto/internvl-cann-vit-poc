@@ -53,12 +53,16 @@ A local replacement OM is ready for manual upload:
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
 size = 1236219952 bytes
-SHA256 = 33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
+SHA256 = 8D081689805763B786BE003B5627061DFB9324EDF3DF7DF0226C8F5A9C093FA7
 source ONNX = artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
 OMG platform = kirin9030
 AI_NPUCL lines = 21
 CPUCL lines = 0
 partition type NPU:0 lines = 0
+Linux static validation = pass
+pre-check report = success, pass 1096, fail 0
+OM JSON input = pixel_values [1, 3, 448, 448]
+OM JSON output = Node_Output [1, 256, 1024]
 ```
 
 Upload this replacement OM to GitHub Release before running the device

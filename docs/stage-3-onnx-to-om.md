@@ -77,7 +77,7 @@ The replacement ViT + projector OM artifact is:
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
 size = 1236219952 bytes
-SHA256 = 33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
+SHA256 = 8D081689805763B786BE003B5627061DFB9324EDF3DF7DF0226C8F5A9C093FA7
 ```
 
 Projector OM details are tracked in:
@@ -368,6 +368,23 @@ AI_NPUCL lines = 21
 CPUCL lines = 0
 partition type NPU:0 lines = 0
 ```
+
+Additional Linux-side static validation:
+
+```text
+OMG --mode 3 pre-check report = success
+pre-check pass = 1096
+pre-check fail = 0
+OMG --mode 1 OM to JSON = success
+OM JSON op count = 1167
+OM JSON input = pixel_values [1, 3, 448, 448]
+OM JSON output = Node_Output [1, 256, 1024]
+```
+
+Note: in this CANN Kit build, `omg --mode 3` still exits with code 1 after
+writing a successful report. The report itself shows all checked ops passed.
+For upload gating, treat the report fields plus OM-to-JSON success as the
+Linux-side static validation evidence.
 
 This is host-side evidence that OMG used the Kirin 9030 NPU path instead of the
 old CPUCL path. It is not final proof of device runtime support; the final proof
