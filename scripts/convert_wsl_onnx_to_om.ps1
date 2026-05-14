@@ -87,7 +87,9 @@ echo "--- WSL output ---"
 ls -lh "${WSL_PROJECT}/artifacts/om/${OUTPUT_NAME}.om"
 echo "--- copy to Windows ---"
 cp "${WSL_PROJECT}/artifacts/om/${OUTPUT_NAME}.om" "${WIN_PROJECT}/artifacts/om/"
+cp "${WSL_PROJECT}/artifacts/om/${OUTPUT_NAME}.omg.log" "${WIN_PROJECT}/artifacts/om/" || true
 ls -lh "${WIN_PROJECT}/artifacts/om/${OUTPUT_NAME}.om"
+ls -lh "${WIN_PROJECT}/artifacts/om/${OUTPUT_NAME}.omg.log" || true
 '@
     $cmd = $cmd.Replace("__WSL_PROJECT__", $wslProject)
     $cmd = $cmd.Replace("__WSL_ONNX__", $wslOnnx)

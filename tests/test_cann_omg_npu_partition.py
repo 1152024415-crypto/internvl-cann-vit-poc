@@ -19,6 +19,12 @@ class CannOmgNpuPartitionTests(unittest.TestCase):
         self.assertIn(".omg.log", script)
         self.assertIn("LAST_PARTITION_LINE", script)
         self.assertIn("tail -n 1", script)
+        self.assertIn("OMG_PLATFORM", script)
+        self.assertIn("--platform", script)
+        self.assertIn("kirin9030", script)
+        self.assertIn("AI_NPUCL", script)
+        self.assertIn("CPUCL", script)
+        self.assertIn("NPU-targeted host conversion", script)
 
     def test_platform_plugin_import_script_installs_into_tools_platform(self) -> None:
         script = read_text("scripts/install_cann_platform_plugin_to_wsl.ps1")
@@ -47,9 +53,17 @@ class CannOmgNpuPartitionTests(unittest.TestCase):
                 self.assertIn("$LASTEXITCODE", script)
                 self.assertIn("throw", script)
 
-    def test_docs_record_current_cpu_only_om_root_cause(self) -> None:
+    def test_wsl_conversion_copies_omg_log_back_to_windows(self) -> None:
+        script = read_text("scripts/convert_wsl_onnx_to_om.ps1")
+
+        self.assertIn(".omg.log", script)
+        self.assertIn("copy to Windows", script)
+
+    def test_docs_record_old_cpu_only_om_and_replacement_evidence(self) -> None:
         docs = read_text("docs/stage-4-vit-projector-chain.md")
 
         self.assertIn("NPU:0, CPU:1", docs)
-        self.assertIn("CPU-only OM", docs)
-        self.assertIn("matching Kirin platform plugin", docs)
+        self.assertIn("Release OM was CPU-only", docs)
+        self.assertIn("Kirin 9030 platform plugin installed", docs)
+        self.assertIn("AI_NPUCL", docs)
+        self.assertIn("CANN-specific ONNX", docs)

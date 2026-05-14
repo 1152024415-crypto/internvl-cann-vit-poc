@@ -37,19 +37,32 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.onnx
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
 
-As of 2026-05-14, the uploaded `.om` is known to be a CPU-only OM from the OMG
-log:
+As of 2026-05-14, the old uploaded `.om` is known to be a CPU-only OM from the
+OMG log:
 
 ```text
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-Do not use that release OM as proof of NPU runtime validation. Yellow-zone
+Do not use that old release OM as proof of NPU runtime validation. Yellow-zone
 runtime already confirmed it can be read and that `HIAI_F` can be selected, but
-`OH_NNCompilation_Build` rejects the model during authentication. The target
-phone platform is Kirin 9030, so reconvert with
-`kirin9030-plugin-6.0.1.0.zip` installed, then replace the release OM before
-running the device validation steps below.
+`OH_NNCompilation_Build` rejects the model during authentication.
+
+A local replacement OM is ready for manual upload:
+
+```text
+artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
+size = 1236219952 bytes
+SHA256 = 33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
+source ONNX = artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
+OMG platform = kirin9030
+AI_NPUCL lines = 21
+CPUCL lines = 0
+partition type NPU:0 lines = 0
+```
+
+Upload this replacement OM to GitHub Release before running the device
+validation steps below.
 
 The yellow-zone runtime demo also uses these raw fp32 validation tensors:
 
@@ -441,9 +454,10 @@ For the 2026-05-14 failure, the matching OMG log shows:
 
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 
-That means the OM is CPU-only. Install the matching Kirin platform plugin into
-WSL, rerun ONNX -> OM conversion, and require the final OMG partition summary to
-show NPU > 0 before retrying this runbook.
+That means the old OM is CPU-only. The replacement OM was regenerated with
+`--platform kirin9030` from the CANN-specific ONNX. If the replacement still
+fails here, keep the full `OH_NNCompilation_Build` log because the next problem
+is no longer the old CPU-only host conversion.
 ```
 
 `device_selection_failed`

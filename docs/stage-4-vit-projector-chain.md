@@ -2,9 +2,9 @@
 
 ## Current Status
 
-Status: ViT + projector chain is verified in PyTorch baseline and ONNX. An OM
-file exists, but the current OM is CPU-only and must be regenerated before NPU
-runtime validation.
+Status: ViT + projector chain is verified in PyTorch baseline and ONNX. A local
+Kirin 9030 replacement OM has been generated from a CANN-specific ONNX, but it
+still needs to be uploaded to GitHub Release and validated on device.
 
 This is the chain we care about before handing image features to the LLM:
 
@@ -136,6 +136,47 @@ cosine = 1.0000001192092896
 This verifies that the ONNX projector chain matches the PyTorch projector
 baseline for more than one image.
 
+## CANN-Specific ONNX
+
+The first projector ONNX still contained a fixed-batch class-token
+`Expand/Cast` helper chain. With `--platform kirin9030`, OMG loaded NPUCL but
+rejected that helper chain through `Equal`, `Select`, and `BroadcastTo`.
+
+The CANN-specific ONNX artifact is:
+
+```text
+artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
+```
+
+Graph surgery:
+
+```text
+static_class_embedding = true
+removed_nodes = 9
+Equal op count = 0
+Where op count = 0
+Expand op count = 0
+```
+
+File size:
+
+```text
+1237297904 bytes
+```
+
+SHA256:
+
+```text
+215A6248B2C5A259A531472210E31282791F50945917CEF6419A238C19E893C2
+```
+
+CANN-specific ONNX Runtime verification:
+
+```text
+dog cosine vs PyTorch = 1.0000001192092896
+cat cosine vs PyTorch = 1.0000001192092896
+```
+
 ## OM Artifact
 
 The ViT + projector OM artifact is:
@@ -147,42 +188,36 @@ artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
 File size:
 
 ```text
-1236220257 bytes
+1236219952 bytes
 ```
 
 SHA256:
 
 ```text
-6E26AF05E176C18D91B513C89289FD384E91C4DB220C1F5393ACBD75E16E764C
+33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
 ```
 
 Conversion log:
 
 ```text
 C:\Users\11520\wsl-onnx-to-om.log
+artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.omg.log
 ```
 
 OMG result:
 
 ```text
 OMG generate offline model success
+OMG platform = kirin9030
+AI_NPUCL lines = 21
+CPUCL lines = 0
+partition type NPU:0 lines = 0
 ```
 
 ## Verification Limits
 
-The OM file has been generated, but we have not run OM inference yet. The local
-tooling has OMG for conversion, not a full HarmonyOS/CANN runtime path for
-executing OM with image tensors.
-
-The OMG log still contains platform warnings:
-
-```text
-GetPlatformVersion: Read platform version error
-partition type NPU:0, CPU:1, GPU:0, ISP:0
-```
-
-The 2026-05-14 yellow-zone device run confirmed this matters. The OM file was
-loaded intact:
+The old Release OM was CPU-only. The 2026-05-14 yellow-zone device run
+confirmed this mattered. The old OM file was loaded intact:
 
 ```text
 om_bytes=1236220257
@@ -191,34 +226,34 @@ OH_NNCompilation_Build failed code=1
 Authentication failed, input model cannot run by npu
 ```
 
-Root cause for the current OM artifact: it is a CPU-only OM. The conversion
-environment did not have the matching Kirin platform plugin installed, so OMG
-generated a model with `NPU:0`. A CPU-only OM is not acceptable for this
-project's NPU validation path.
+The old root cause was:
 
-Before publishing another OM for HarmonyOS validation, install the matching
-Kirin platform plugin into WSL and reconvert. The target phone platform is Kirin
-9030, so use `kirin9030-plugin-6.0.1.0.zip`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install_cann_platform_plugin_to_wsl.ps1 `
-  -PluginPackagePath C:\Users\11520\Downloads\kirin9030-plugin-6.0.1.0.zip
-
-powershell -ExecutionPolicy Bypass -File scripts\convert_wsl_onnx_to_om.ps1
+```text
+partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-The conversion script now treats `partition type NPU:0` as a failure by default.
-Only set `REQUIRE_NPU_PARTITION=0` for explicit CPU fallback experiments.
+The replacement OM was generated after:
+
+```text
+Kirin 9030 platform plugin installed
+OMG called with --platform kirin9030
+CANN-specific ONNX removed static class-token Equal/Where/Expand
+```
+
+The latest OMG log does not print a partition summary. The host-side evidence is
+therefore weaker than a phone run, but it is materially different from the old
+CPU-only conversion: it shows `AI_NPUCL`, does not show `CPUCL`, and does not
+show `partition type NPU:0`.
 
 So the current verified chain is:
 
 ```text
 PyTorch projector baseline: verified
 ONNX projector inference: verified against PyTorch
-ONNX projector -> OM conversion: file generation verified, current OM is CPU-only
+CANN-specific ONNX inference: verified against PyTorch
+ONNX projector -> OM conversion: host-side Kirin 9030 NPU-targeted conversion generated
 OM runtime inference: not verified yet
 ```
 
-The next non-HarmonyOS task is to keep improving validation around ONNX and
-model artifacts. Device runtime validation must wait until we have a workable
-HarmonyOS/CANN runtime environment.
+The next step is to upload the replacement `.om` to GitHub Release, copy it into
+the yellow-zone HarmonyOS app rawfile directory, and rerun device validation.

@@ -2,15 +2,15 @@
 
 ## Current Status
 
-Status: static pure-ViT and ViT + projector ONNX files have been converted to
-OM with CANN Kit OMG, but the current OM artifact is CPU-only and must be
-regenerated before NPU validation.
+Status: the old ViT + projector OM was CPU-only. A replacement projector OM has
+now been generated for Kirin 9030 from a CANN-specific ONNX. Device runtime
+validation is still pending.
 
 WSL status from the installation logs:
 
 ```text
 WSL version: 2.7.3.0
-Distro: Ubuntu-22.04
+Distro: InternVL-Ubuntu-22.04
 Distro WSL version: 2
 Ubuntu: 22.04.1 LTS
 Default Linux user: root
@@ -30,9 +30,9 @@ OMG path: /root/cann-kit/tools/tools_omg/omg
 convert script result: success, exit=0
 ```
 
-Important 2026-05-14 finding: the old `success, exit=0` result only means OMG
-wrote an `.om` file. It does not mean the file can run on the phone NPU. The
-same log contains:
+Important 2026-05-14 finding: the old `success, exit=0` result only meant OMG
+wrote an `.om` file. It did not mean the file could run on the phone NPU. The
+old log contained:
 
 ```text
 dlopen so failed: libai_npucore_itf.so: cannot open shared object file
@@ -40,8 +40,15 @@ GetPlatformVersion: Read platform version error
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-That means the generated OM is CPU-only. The missing piece is the matching Kirin
-platform plugin under `tools/platform`.
+That meant the generated OM was CPU-only.
+
+The replacement flow fixed two issues:
+
+```text
+1. Install kirin9030 platform plugin under /root/cann-kit/tools/platform/kirin9030.
+2. Pass --platform kirin9030 to OMG.
+3. Remove the fixed-batch class-token Equal/Where/Expand helper chain from ONNX.
+```
 
 ## What OM Means
 
@@ -65,22 +72,12 @@ The pure ViT OM artifact is:
 artifacts/om/internvl3_5_vit_fp32_opset18_staticpos.om
 ```
 
-The ViT + projector OM artifact is:
+The replacement ViT + projector OM artifact is:
 
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
-```
-
-Windows file size:
-
-```text
-1215201603 bytes
-```
-
-Windows SHA256:
-
-```text
-79D2D34B8AA3A02113E76B93E7223E7D3CDBEC17794E711C4B3D01835959C818
+size = 1236219952 bytes
+SHA256 = 33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
 ```
 
 Projector OM details are tracked in:
@@ -135,6 +132,27 @@ ONNX Runtime vs PyTorch mean_abs_diff = 5.648157184623415e-06
 Resize op count = 0
 ```
 
+For the ViT + projector deployment path, use the CANN-specific projector ONNX:
+
+```text
+artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
+```
+
+It is derived from:
+
+```text
+artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos.onnx
+```
+
+by replacing the fixed batch=1 class-token `Expand/Cast` helper chain with the
+existing class embedding initializer and pruning 9 dead nodes. ONNX Runtime
+verification remains aligned with the PyTorch projector baseline:
+
+```text
+dog cosine = 1.0000001192092896
+cat cosine = 1.0000001192092896
+```
+
 ## Conversion Script
 
 The project has a Linux conversion script:
@@ -165,7 +183,8 @@ omg \
   --model ./artifacts/onnx/internvl3_5_vit_fp32_opset18_staticpos.onnx \
   --framework 5 \
   --input_shape "pixel_values:1,3,448,448" \
-  --output ./artifacts/om/internvl3_5_vit_fp32_opset18_staticpos
+  --output ./artifacts/om/internvl3_5_vit_fp32_opset18_staticpos \
+  --platform kirin9030
 ```
 
 ## OMG Tool Location
@@ -334,18 +353,26 @@ C:\Users\11520\wsl-om-copy.log
 The first OMG run failed on the original ONNX because CANN Kit rejected bicubic
 `Resize`. The static-position ONNX removed that op and converted successfully.
 
-The old successful OMG log still contains platform warnings:
+The old successful OMG log still contained platform warnings:
 
 ```text
 GetPlatformVersion: Read platform version error
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-So this stage proves that the model can be converted to an OM file, but it also
-proves the current OM is not an NPU artifact. The conversion script now rejects
-CPU-only OM logs by default. A replacement OM is acceptable for yellow-zone NPU
-validation only when the final OMG partition summary has `NPU` greater than
-zero.
+The replacement OMG log does not print a partition summary, but it does show:
+
+```text
+OMG generate offline model success = 1
+AI_NPUCL lines = 21
+CPUCL lines = 0
+partition type NPU:0 lines = 0
+```
+
+This is host-side evidence that OMG used the Kirin 9030 NPU path instead of the
+old CPUCL path. It is not final proof of device runtime support; the final proof
+is still `OH_NNCompilation_Build` and `OH_NNExecutor_RunSync` on the HarmonyOS
+device.
 
 ## Expected Failure Modes After OM Generation
 
@@ -359,4 +386,6 @@ Conv
 ```
 
 `Resize` was the first actual blocker and has been removed from the static
-position embedding ONNX export.
+position embedding ONNX export. The second blocker was the fixed-batch
+class-token `Equal`/`Where`/`Expand` helper chain; it is removed by
+`internvl-simplify-onnx-for-cann`.

@@ -9,6 +9,59 @@ Current release:
 https://github.com/1152024415-crypto/internvl-cann-vit-poc/releases/tag/v0.1.0-artifacts
 ```
 
+## Current OM Replacement Status
+
+As of 2026-05-14, the Release asset named below is stale:
+
+```text
+internvl3_5_vit_projector_fp32_opset18_staticpos.om
+```
+
+The uploaded file was generated before the Kirin 9030 platform plugin and
+CANN-specific ONNX surgery were added. The yellow-zone device run showed that
+old file could be read and `HIAI_F` could be selected, but
+`OH_NNCompilation_Build` rejected it because the host OMG log showed:
+
+```text
+partition type NPU:0, CPU:1, GPU:0, ISP:0
+```
+
+Replace the Release asset manually with this local file:
+
+```text
+artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
+size = 1236219952 bytes
+SHA256 = 33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
+```
+
+Keep the asset name unchanged so the yellow-zone runbook and app packaging
+steps continue to work:
+
+```text
+internvl3_5_vit_projector_fp32_opset18_staticpos.om
+```
+
+The replacement OM was generated from:
+
+```text
+artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
+SHA256 = 215A6248B2C5A259A531472210E31282791F50945917CEF6419A238C19E893C2
+```
+
+Host-side conversion evidence:
+
+```text
+OMG platform = kirin9030
+OMG generate offline model success = 1
+AI_NPUCL lines = 21
+CPUCL lines = 0
+partition type NPU:0 lines = 0
+```
+
+This is still not final device proof. Final proof requires a yellow-zone
+HarmonyOS phone run where `OH_NNCompilation_Build` and
+`OH_NNExecutor_RunSync` both succeed.
+
 Included artifacts:
 
 ```text

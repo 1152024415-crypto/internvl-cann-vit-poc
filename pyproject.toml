@@ -21,6 +21,7 @@ dependencies = [
 internvl-vit-baseline = "internvl_vit_poc.baseline:main"
 internvl-export-onnx = "internvl_vit_poc.onnx_export:main"
 internvl-onnx-verify = "internvl_vit_poc.onnx_verify:main"
+internvl-simplify-onnx-for-cann = "internvl_vit_poc.onnx_static_surgery:main"
 internvl-export-validation-tensors = "internvl_vit_poc.validation_tensors:main"
 
 [build-system]

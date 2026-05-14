@@ -8,6 +8,7 @@ MODEL_PATH="${1:-${PROJECT_ROOT}/artifacts/onnx/internvl3_5_vit_fp32_opset18_sta
 OUTPUT_PREFIX="${2:-${PROJECT_ROOT}/artifacts/om/internvl3_5_vit_fp32_opset18_staticpos}"
 LOG_PATH="${OMG_LOG_PATH:-${OUTPUT_PREFIX}.omg.log}"
 REQUIRE_NPU_PARTITION="${REQUIRE_NPU_PARTITION:-1}"
+OMG_PLATFORM="${OMG_PLATFORM:-kirin9030}"
 
 find_omg() {
   if [[ -n "${OMG_BIN:-}" && -x "${OMG_BIN}" ]]; then
@@ -83,31 +84,59 @@ echo "Using OMG: ${OMG}"
 echo "Input ONNX: ${MODEL_PATH}"
 echo "Output prefix: ${OUTPUT_PREFIX}"
 echo "OMG log: ${LOG_PATH}"
+echo "OMG platform: ${OMG_PLATFORM}"
 
 mkdir -p "$(dirname "${LOG_PATH}")"
 
+OMG_ARGS=(
+  --model "${MODEL_PATH}"
+  --framework 5
+  --input_shape "pixel_values:1,3,448,448"
+  --output "${OUTPUT_PREFIX}"
+)
+
+if [[ -n "${OMG_PLATFORM}" ]]; then
+  OMG_ARGS+=(--platform "${OMG_PLATFORM}")
+fi
+
 "${OMG}" \
-  --model "${MODEL_PATH}" \
-  --framework 5 \
-  --input_shape "pixel_values:1,3,448,448" \
-  --output "${OUTPUT_PREFIX}" 2>&1 | tee "${LOG_PATH}"
+  "${OMG_ARGS[@]}" 2>&1 | tee "${LOG_PATH}"
 
 if [[ "${REQUIRE_NPU_PARTITION}" == "1" ]]; then
   LAST_PARTITION_LINE="$(grep "partition type NPU:" "${LOG_PATH}" | tail -n 1 || true)"
 
   if [[ -z "${LAST_PARTITION_LINE}" ]]; then
-    cat >&2 <<EOF
+    if grep -q "OMG generate offline model success" "${LOG_PATH}" \
+      && grep -q "AI_NPUCL" "${LOG_PATH}" \
+      && ! grep -q "CPUCL" "${LOG_PATH}" \
+      && ! grep -q "partition type NPU:0" "${LOG_PATH}"; then
+      cat >&2 <<EOF
+No partition summary was printed by OMG.
+
+Accepting this as an NPU-targeted host conversion because:
+- OMG reported offline model generation success.
+- The log shows AI_NPUCL activity for platform ${OMG_PLATFORM}.
+- The log does not show CPUCL fallback or partition type NPU:0.
+
+Device-side OH_NNCompilation_Build/RunSync is still required for final proof.
+
+Log: ${LOG_PATH}
+EOF
+    else
+      cat >&2 <<EOF
 Could not prove the OM has an NPU partition.
 
-Expected the OMG log to contain a partition summary with NPU > 0.
+Expected either:
+- an OMG partition summary with NPU > 0, or
+- OMG success with AI_NPUCL activity and no CPUCL fallback.
+
 Set REQUIRE_NPU_PARTITION=0 only for explicit CPU fallback experiments.
 
 Log: ${LOG_PATH}
 EOF
-    exit 6
-  fi
-
-  if [[ "${LAST_PARTITION_LINE}" == *"partition type NPU:0"* ]]; then
+      exit 6
+    fi
+  elif [[ "${LAST_PARTITION_LINE}" == *"partition type NPU:0"* ]]; then
     cat >&2 <<EOF
 CPU-only OM is not acceptable for this project.
 
@@ -120,9 +149,7 @@ ${LAST_PARTITION_LINE}
 Log: ${LOG_PATH}
 EOF
     exit 5
-  fi
-
-  if ! grep -Eq "partition type NPU:[1-9][0-9]*" <<<"${LAST_PARTITION_LINE}"; then
+  elif ! grep -Eq "partition type NPU:[1-9][0-9]*" <<<"${LAST_PARTITION_LINE}"; then
     cat >&2 <<EOF
 Could not parse a positive NPU partition count.
 

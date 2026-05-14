@@ -44,12 +44,29 @@ dog cosine vs PyTorch = 1.0000001192092896
 cat cosine vs PyTorch = 1.0000001192092896
 ```
 
-OM conversion:
+CANN-specific ONNX surgery:
+
+```text
+artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
+static_class_embedding = true
+removed_nodes = 9
+removed embedding Equal/Where/Expand = yes
+dog cosine vs PyTorch = 1.0000001192092896
+cat cosine vs PyTorch = 1.0000001192092896
+SHA256 = 215A6248B2C5A259A531472210E31282791F50945917CEF6419A238C19E893C2
+```
+
+Local replacement OM conversion:
 
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
-OMG result = success, but current artifact is CPU-only
-latest partition summary = NPU:0, CPU:1, GPU:0, ISP:0
+size = 1236219952 bytes
+SHA256 = 33CA510F80C02C5C990C7050E23F434A6863C94D0D074603E2A29E69D81ADE7B
+OMG platform = kirin9030
+OMG result = success
+AI_NPUCL lines = 21
+CPUCL lines = 0
+partition type NPU:0 lines = 0
 ```
 
 Release assets uploaded:
@@ -60,12 +77,10 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.om
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
 
-Important: the currently uploaded `.om` is not a valid NPU validation asset.
-Yellow-zone logs confirmed that the file loads intact and `HIAI_F` is found,
-but `OH_NNCompilation_Build` fails with model authentication because the OM was
-generated without an NPU partition. Install the matching Kirin platform plugin
-into WSL, reconvert, and upload a replacement OM before retrying device NPU
-runtime validation.
+Important: the currently uploaded Release `.om` is the old CPU-only asset and
+is not a valid NPU validation asset. A local replacement OM has been generated
+from the CANN-specific ONNX with Kirin 9030 platform evidence, but it has not
+been uploaded to GitHub Release yet.
 
 Small tracked artifact metadata:
 
@@ -112,8 +127,6 @@ do not execute on the ArkUI event thread.
 Device-side work still pending:
 
 ```text
-install matching Kirin platform plugin into WSL
-reconvert projector OM and verify OMG partition summary has NPU > 0
 upload replacement OM
 compile/install on a yellow-zone physical HarmonyOS device
 confirm HIAI_F / NPU placement with the replacement OM
