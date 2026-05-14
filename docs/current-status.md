@@ -40,7 +40,8 @@ OM conversion:
 
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
-OMG result = success
+OMG result = success, but current artifact is CPU-only
+latest partition summary = NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
 Release assets uploaded:
@@ -50,6 +51,13 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.onnx
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
+
+Important: the currently uploaded `.om` is not a valid NPU validation asset.
+Yellow-zone logs confirmed that the file loads intact and `HIAI_F` is found,
+but `OH_NNCompilation_Build` fails with model authentication because the OM was
+generated without an NPU partition. Install the matching Kirin platform plugin
+into WSL, reconvert, and upload a replacement OM before retrying device NPU
+runtime validation.
 
 Small tracked artifact metadata:
 
@@ -96,8 +104,11 @@ do not execute on the ArkUI event thread.
 Device-side work still pending:
 
 ```text
+install matching Kirin platform plugin into WSL
+reconvert projector OM and verify OMG partition summary has NPU > 0
+upload replacement OM
 compile/install on a yellow-zone physical HarmonyOS device
-confirm HIAI_F / NPU placement
+confirm HIAI_F / NPU placement with the replacement OM
 confirm OH_NNExecutor_RunSync succeeds
 compare output against baseline on device
 measure latency, memory, cold start, 20-run stability

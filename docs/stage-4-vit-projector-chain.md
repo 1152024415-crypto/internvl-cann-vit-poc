@@ -2,8 +2,9 @@
 
 ## Current Status
 
-Status: ViT + projector chain is available in PyTorch baseline, ONNX, and OM
-formats.
+Status: ViT + projector chain is verified in PyTorch baseline and ONNX. An OM
+file exists, but the current OM is CPU-only and must be regenerated before NPU
+runtime validation.
 
 This is the chain we care about before handing image features to the LLM:
 
@@ -180,12 +181,40 @@ GetPlatformVersion: Read platform version error
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
+The 2026-05-14 yellow-zone device run confirmed this matters. The OM file was
+loaded intact:
+
+```text
+om_bytes=1236220257
+selected_device=name=HIAI_F type=ACCELERATOR
+OH_NNCompilation_Build failed code=1
+Authentication failed, input model cannot run by npu
+```
+
+Root cause for the current OM artifact: it is a CPU-only OM. The conversion
+environment did not have the matching Kirin platform plugin installed, so OMG
+generated a model with `NPU:0`. A CPU-only OM is not acceptable for this
+project's NPU validation path.
+
+Before publishing another OM for HarmonyOS validation, install the matching
+Kirin platform plugin into WSL and reconvert. Example:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install_cann_platform_plugin_to_wsl.ps1 `
+  -PluginPackagePath C:\Users\11520\Downloads\kirin9020-plugin-6.0.1.0.zip
+
+powershell -ExecutionPolicy Bypass -File scripts\convert_wsl_onnx_to_om.ps1
+```
+
+The conversion script now treats `partition type NPU:0` as a failure by default.
+Only set `REQUIRE_NPU_PARTITION=0` for explicit CPU fallback experiments.
+
 So the current verified chain is:
 
 ```text
 PyTorch projector baseline: verified
 ONNX projector inference: verified against PyTorch
-ONNX projector -> OM conversion: verified
+ONNX projector -> OM conversion: file generation verified, current OM is CPU-only
 OM runtime inference: not verified yet
 ```
 

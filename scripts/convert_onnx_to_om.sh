@@ -6,6 +6,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 MODEL_PATH="${1:-${PROJECT_ROOT}/artifacts/onnx/internvl3_5_vit_fp32_opset18_staticpos.onnx}"
 OUTPUT_PREFIX="${2:-${PROJECT_ROOT}/artifacts/om/internvl3_5_vit_fp32_opset18_staticpos}"
+LOG_PATH="${OMG_LOG_PATH:-${OUTPUT_PREFIX}.omg.log}"
+REQUIRE_NPU_PARTITION="${REQUIRE_NPU_PARTITION:-1}"
 
 find_omg() {
   if [[ -n "${OMG_BIN:-}" && -x "${OMG_BIN}" ]]; then
@@ -80,11 +82,60 @@ fi
 echo "Using OMG: ${OMG}"
 echo "Input ONNX: ${MODEL_PATH}"
 echo "Output prefix: ${OUTPUT_PREFIX}"
+echo "OMG log: ${LOG_PATH}"
+
+mkdir -p "$(dirname "${LOG_PATH}")"
 
 "${OMG}" \
   --model "${MODEL_PATH}" \
   --framework 5 \
   --input_shape "pixel_values:1,3,448,448" \
-  --output "${OUTPUT_PREFIX}"
+  --output "${OUTPUT_PREFIX}" 2>&1 | tee "${LOG_PATH}"
+
+if [[ "${REQUIRE_NPU_PARTITION}" == "1" ]]; then
+  LAST_PARTITION_LINE="$(grep "partition type NPU:" "${LOG_PATH}" | tail -n 1 || true)"
+
+  if [[ -z "${LAST_PARTITION_LINE}" ]]; then
+    cat >&2 <<EOF
+Could not prove the OM has an NPU partition.
+
+Expected the OMG log to contain a partition summary with NPU > 0.
+Set REQUIRE_NPU_PARTITION=0 only for explicit CPU fallback experiments.
+
+Log: ${LOG_PATH}
+EOF
+    exit 6
+  fi
+
+  if [[ "${LAST_PARTITION_LINE}" == *"partition type NPU:0"* ]]; then
+    cat >&2 <<EOF
+CPU-only OM is not acceptable for this project.
+
+OMG generated an OM, but its partition summary says NPU:0. Install the matching
+Kirin platform plugin under tools/platform, then rerun conversion.
+
+Last partition summary:
+${LAST_PARTITION_LINE}
+
+Log: ${LOG_PATH}
+EOF
+    exit 5
+  fi
+
+  if ! grep -Eq "partition type NPU:[1-9][0-9]*" <<<"${LAST_PARTITION_LINE}"; then
+    cat >&2 <<EOF
+Could not parse a positive NPU partition count.
+
+Expected the final OMG partition summary to contain NPU > 0.
+Set REQUIRE_NPU_PARTITION=0 only for explicit CPU fallback experiments.
+
+Last partition summary:
+${LAST_PARTITION_LINE}
+
+Log: ${LOG_PATH}
+EOF
+    exit 6
+  fi
+fi
 
 echo "Expected OM output: ${OUTPUT_PREFIX}.om"

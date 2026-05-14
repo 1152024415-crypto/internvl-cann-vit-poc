@@ -3,7 +3,8 @@
 ## Current Status
 
 Status: static pure-ViT and ViT + projector ONNX files have been converted to
-OM with CANN Kit OMG.
+OM with CANN Kit OMG, but the current OM artifact is CPU-only and must be
+regenerated before NPU validation.
 
 WSL status from the installation logs:
 
@@ -28,6 +29,19 @@ Conversion script copied: yes
 OMG path: /root/cann-kit/tools/tools_omg/omg
 convert script result: success, exit=0
 ```
+
+Important 2026-05-14 finding: the old `success, exit=0` result only means OMG
+wrote an `.om` file. It does not mean the file can run on the phone NPU. The
+same log contains:
+
+```text
+dlopen so failed: libai_npucore_itf.so: cannot open shared object file
+GetPlatformVersion: Read platform version error
+partition type NPU:0, CPU:1, GPU:0, ISP:0
+```
+
+That means the generated OM is CPU-only. The missing piece is the matching Kirin
+platform plugin under `tools/platform`.
 
 ## What OM Means
 
@@ -268,6 +282,22 @@ DDK-tools-next-6.0.1.0.zip
 SHA256 = 1B2822FB9E5FE7443782915C6F34B4A2CE5C028207E7782514BD93970FF8E48A
 ```
 
+This package provides the common tools, including OMG. It is not enough by
+itself for NPU-targeted OM generation. Also import the platform plugin that
+matches the target phone SoC, for example `kirin9020-plugin-6.0.1.0.zip`,
+`kirinx90-plugin-6.0.1.0.zip`, or `kirin9030-plugin-6.0.1.0.zip`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install_cann_platform_plugin_to_wsl.ps1 `
+  -PluginPackagePath C:\Users\11520\Downloads\kirin9020-plugin-6.0.1.0.zip
+```
+
+The plugin is installed into:
+
+```text
+/root/cann-kit/tools/platform/<kirin...>
+```
+
 ## Copying OM Back To Windows
 
 The Windows helper script:
@@ -299,16 +329,18 @@ C:\Users\11520\wsl-om-copy.log
 The first OMG run failed on the original ONNX because CANN Kit rejected bicubic
 `Resize`. The static-position ONNX removed that op and converted successfully.
 
-The successful OMG log still contains platform warnings:
+The old successful OMG log still contains platform warnings:
 
 ```text
 GetPlatformVersion: Read platform version error
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-So this stage proves that the model can be converted to an OM file, but it does
-not prove that the final phone runtime will place the graph on NPU. That must be
-validated in the HarmonyOS Native C++ demo with the actual target device.
+So this stage proves that the model can be converted to an OM file, but it also
+proves the current OM is not an NPU artifact. The conversion script now rejects
+CPU-only OM logs by default. A replacement OM is acceptable for yellow-zone NPU
+validation only when the final OMG partition summary has `NPU` greater than
+zero.
 
 ## Expected Failure Modes After OM Generation
 
