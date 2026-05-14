@@ -16,6 +16,14 @@ This is not full VLM text generation. It produces visual embeddings for the LLM:
 visual_tokens [1, 256, 1024]
 ```
 
+Target phone platform for NPU OM generation:
+
+```text
+Kirin 9030
+platform plugin package = kirin9030-plugin-6.0.1.0
+expected SHA256 = 3B32EFFC5AF9804628CB9287E88CC28ED381877ADB15DD85BF8D66E3BE805251
+```
+
 ## Completed
 
 Model split and PyTorch baselines:

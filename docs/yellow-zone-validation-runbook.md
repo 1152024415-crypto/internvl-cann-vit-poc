@@ -46,8 +46,9 @@ partition type NPU:0, CPU:1, GPU:0, ISP:0
 
 Do not use that release OM as proof of NPU runtime validation. Yellow-zone
 runtime already confirmed it can be read and that `HIAI_F` can be selected, but
-`OH_NNCompilation_Build` rejects the model during authentication. Reconvert with
-the matching Kirin platform plugin installed, then replace the release OM before
+`OH_NNCompilation_Build` rejects the model during authentication. The target
+phone platform is Kirin 9030, so reconvert with
+`kirin9030-plugin-6.0.1.0.zip` installed, then replace the release OM before
 running the device validation steps below.
 
 The yellow-zone runtime demo also uses these raw fp32 validation tensors:

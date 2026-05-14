@@ -197,11 +197,12 @@ generated a model with `NPU:0`. A CPU-only OM is not acceptable for this
 project's NPU validation path.
 
 Before publishing another OM for HarmonyOS validation, install the matching
-Kirin platform plugin into WSL and reconvert. Example:
+Kirin platform plugin into WSL and reconvert. The target phone platform is Kirin
+9030, so use `kirin9030-plugin-6.0.1.0.zip`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install_cann_platform_plugin_to_wsl.ps1 `
-  -PluginPackagePath C:\Users\11520\Downloads\kirin9020-plugin-6.0.1.0.zip
+  -PluginPackagePath C:\Users\11520\Downloads\kirin9030-plugin-6.0.1.0.zip
 
 powershell -ExecutionPolicy Bypass -File scripts\convert_wsl_onnx_to_om.ps1
 ```

@@ -283,13 +283,18 @@ SHA256 = 1B2822FB9E5FE7443782915C6F34B4A2CE5C028207E7782514BD93970FF8E48A
 ```
 
 This package provides the common tools, including OMG. It is not enough by
-itself for NPU-targeted OM generation. Also import the platform plugin that
-matches the target phone SoC, for example `kirin9020-plugin-6.0.1.0.zip`,
-`kirinx90-plugin-6.0.1.0.zip`, or `kirin9030-plugin-6.0.1.0.zip`:
+itself for NPU-targeted OM generation. The target phone platform is Kirin 9030,
+so import `kirin9030-plugin-6.0.1.0.zip`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install_cann_platform_plugin_to_wsl.ps1 `
-  -PluginPackagePath C:\Users\11520\Downloads\kirin9020-plugin-6.0.1.0.zip
+  -PluginPackagePath C:\Users\11520\Downloads\kirin9030-plugin-6.0.1.0.zip
+```
+
+Expected plugin SHA256:
+
+```text
+3B32EFFC5AF9804628CB9287E88CC28ED381877ADB15DD85BF8D66E3BE805251
 ```
 
 The plugin is installed into:
