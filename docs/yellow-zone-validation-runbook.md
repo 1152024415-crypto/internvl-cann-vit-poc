@@ -253,6 +253,9 @@ load_model_read_om_start
 load_model_read_om_done
 load_model_select_hiai_f
 load_model_construct_compilation
+hiai_compatibility_check
+load_model_set_hiai_build_options
+hiai_build_options_done
 load_model_build_start
 load_model_create_executor
 load_model_done
@@ -452,6 +455,30 @@ then the OM reached NNRt/CANN, but the NPU backend rejected it during model
 authentication. Record the exact `OH_NNCompilation_Build failed code=...`, the
 `om_bytes` value, the selected device, and the full CANN/NNRt/DLSA log section.
 This is not an ArkUI or NAPI-threading failure.
+
+The native demo now follows the public CANN Kit C++ sample's build setup before
+`OH_NNCompilation_Build`:
+
+```text
+HMS_HiAICompatibility_CheckFromBuffer
+HMS_HiAIOptions_SetBandMode(HIAI_BANDMODE_NORMAL)
+HMS_HiAIOptions_SetModelDeviceOrder(HIAI_EXECUTE_DEVICE_NPU)
+```
+
+In a fresh run, look for these additional stages:
+
+```text
+hiai_compatibility_check compatibility=...
+load_model_set_hiai_build_options
+hiai_build_options_done band_mode=normal execute_device_order=npu
+```
+
+If `hiai_build_options_done` says `skipped=...`, the active SDK/ABI did not
+provide `libhiai_foundation.so` plus the CANN Kit headers. If the options are
+applied and the same authentication failure remains, compare against the
+official SqueezeNet CANN sample on the same phone. If the official sample also
+fails, treat it as yellow-zone SDK/device/signing environment. If the official
+sample passes, treat our ViT projector OM as the failing component.
 
 For the 2026-05-14 failure, the matching OMG log shows:
 

@@ -7,6 +7,15 @@
 #include "hilog/log.h"
 #include "neural_network_runtime/neural_network_core.h"
 
+#if defined(INTERNVL_HAS_HIAI_FOUNDATION) && __has_include("CANNKit/hiai_options.h") && \
+    __has_include("CANNKit/hiai_helper.h")
+#define INTERNVL_ENABLE_HIAI_OPTIONS 1
+#include "CANNKit/hiai_helper.h"
+#include "CANNKit/hiai_options.h"
+#else
+#define INTERNVL_ENABLE_HIAI_OPTIONS 0
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -49,6 +58,11 @@ void LogStageError(const char* stage, const std::string& message)
 {
     OH_LOG_Print(LOG_APP, LOG_ERROR, kLogDomain, kLogTag, "stage=%{public}s error=%{public}s", stage,
                  message.c_str());
+}
+
+void LogStageInfo(const char* stage, const std::string& message)
+{
+    OH_LOG_Print(LOG_APP, LOG_INFO, kLogDomain, kLogTag, "stage=%{public}s %{public}s", stage, message.c_str());
 }
 
 int ReturnCodeToInt(OH_NN_ReturnCode code)
@@ -121,6 +135,45 @@ DeviceSelection SelectHiaiFDevice()
     selection.errorMessage = std::string(kRequiredNpuName) + " device not found. Available devices: " +
                              available.str();
     return selection;
+}
+
+void LogHiaiCompatibility(const std::vector<std::uint8_t>& modelBytes)
+{
+#if INTERNVL_ENABLE_HIAI_OPTIONS
+    const HiAI_Compatibility compatibility =
+        HMS_HiAICompatibility_CheckFromBuffer(modelBytes.data(), modelBytes.size());
+    LogStageInfo("hiai_compatibility_check",
+                 "compatibility=" + std::to_string(static_cast<int>(compatibility)));
+#else
+    LogStageInfo("hiai_compatibility_check", "skipped=missing_hiai_foundation_headers_or_library");
+#endif
+}
+
+OH_NN_ReturnCode SetOfficialHiaiBuildOptions(OH_NNCompilation* compilation)
+{
+#if INTERNVL_ENABLE_HIAI_OPTIONS
+    OH_NN_ReturnCode code = HMS_HiAIOptions_SetBandMode(compilation, HiAI_BandMode::HIAI_BANDMODE_NORMAL);
+    if (code != OH_NN_SUCCESS) {
+        LogStageError("hiai_set_band_mode_failed",
+                      "HMS_HiAIOptions_SetBandMode failed code=" + std::to_string(ReturnCodeToInt(code)));
+        return code;
+    }
+
+    std::vector<HiAI_ExecuteDevice> executeDevices {HiAI_ExecuteDevice::HIAI_EXECUTE_DEVICE_NPU};
+    code = HMS_HiAIOptions_SetModelDeviceOrder(compilation, executeDevices.data(), executeDevices.size());
+    if (code != OH_NN_SUCCESS) {
+        LogStageError("hiai_set_model_device_order_failed",
+                      "HMS_HiAIOptions_SetModelDeviceOrder failed code=" + std::to_string(ReturnCodeToInt(code)));
+        return code;
+    }
+
+    LogStageInfo("hiai_build_options_done", "band_mode=normal execute_device_order=npu");
+    return OH_NN_SUCCESS;
+#else
+    (void)compilation;
+    LogStageInfo("hiai_build_options_done", "skipped=missing_hiai_foundation_headers_or_library");
+    return OH_NN_SUCCESS;
+#endif
 }
 
 const TestCase* FindCase(const std::string& caseName)
@@ -390,6 +443,7 @@ ModelStatusResult LoadModel(NativeResourceManager* resourceManager)
     OH_NNExecutor* executor = nullptr;
 
     LogStage("load_model_construct_compilation");
+    LogHiaiCompatibility(modelBytes.bytes);
     compilation = OH_NNCompilation_ConstructWithOfflineModelBuffer(modelBytes.bytes.data(), modelBytes.bytes.size());
     if (compilation == nullptr) {
         return ModelFail("om_compilation_failed", "OH_NNCompilation_ConstructWithOfflineModelBuffer failed", start);
@@ -401,6 +455,15 @@ ModelStatusResult LoadModel(NativeResourceManager* resourceManager)
         return ModelFail("device_selection_failed",
                          "OH_NNCompilation_SetDevice failed code=" + std::to_string(ReturnCodeToInt(code)) +
                              " device=" + device.label,
+                         start);
+    }
+
+    LogStage("load_model_set_hiai_build_options");
+    code = SetOfficialHiaiBuildOptions(compilation);
+    if (code != OH_NN_SUCCESS) {
+        DestroyCompilation(&compilation);
+        return ModelFail("hiai_build_options_failed",
+                         "Official HiAI build option setup failed code=" + std::to_string(ReturnCodeToInt(code)),
                          start);
     }
 

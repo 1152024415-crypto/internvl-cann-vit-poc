@@ -33,6 +33,7 @@ find_library(HIAI_FOUNDATION_LIBRARY
 if(HIAI_FOUNDATION_LIBRARY)
     message(STATUS "Linking optional HiAI foundation library: ${HIAI_FOUNDATION_LIBRARY}")
     list(APPEND ENTRY_LINK_LIBS ${HIAI_FOUNDATION_LIBRARY})
+    target_compile_definitions(entry PRIVATE INTERNVL_HAS_HIAI_FOUNDATION=1)
 else()
     message(STATUS "Optional HiAI foundation library not found; relying on libneural_network_core.so")
 endif()

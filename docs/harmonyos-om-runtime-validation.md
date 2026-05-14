@@ -120,9 +120,19 @@ The native build is limited to `arm64-v8a` because this validation is meant for
 a physical HarmonyOS phone with NN runtime / NPU support. Do not use x86_64
 emulator results as OM runtime validation results.
 
-`libhiai_foundation.so` is not linked as a required library. The native code
-calls `OH_NN*` APIs from `libneural_network_core.so`; `libhiai_foundation.so` is
-linked only if the SDK provides it for the active ABI.
+The official CANN Kit C++ sample links `libhiai_foundation.so` and sets HiAI
+build options before `OH_NNCompilation_Build`. This demo follows that pattern
+when the SDK exposes the library and headers for the active ABI:
+
+```text
+HMS_HiAICompatibility_CheckFromBuffer
+HMS_HiAIOptions_SetBandMode(HIAI_BANDMODE_NORMAL)
+HMS_HiAIOptions_SetModelDeviceOrder(HIAI_EXECUTE_DEVICE_NPU)
+```
+
+If `libhiai_foundation.so` or the CANN Kit headers are unavailable for an ABI,
+the native code logs that the HiAI option step was skipped. Do not use emulator
+or x86_64 results as NPU validation.
 
 ## Expected Shapes
 

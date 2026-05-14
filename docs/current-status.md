@@ -115,8 +115,11 @@ The native side follows the CANN Kit endpoint deployment lifecycle:
 ```text
 read .om rawfile
 select HIAI_F
+HMS_HiAICompatibility_CheckFromBuffer
 OH_NNCompilation_ConstructWithOfflineModelBuffer
 OH_NNCompilation_SetDevice
+HMS_HiAIOptions_SetBandMode(HIAI_BANDMODE_NORMAL)
+HMS_HiAIOptions_SetModelDeviceOrder(HIAI_EXECUTE_DEVICE_NPU)
 OH_NNCompilation_Build
 OH_NNExecutor_Construct
 destroy compilation
