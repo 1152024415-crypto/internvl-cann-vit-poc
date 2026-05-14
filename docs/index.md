@@ -69,6 +69,13 @@ yellow-zone-validation-runbook.md
 Step-by-step yellow-zone DevEco/HarmonyOS device validation guide.
 
 ```text
+yellow-zone-onnx-to-om-ddk-runbook.md
+```
+
+Yellow-zone DDK/OMG ONNX-to-OM regeneration guide with required logs,
+static-shape gates, precheck, OM-to-JSON inspection, and upload checklist.
+
+```text
 next-steps.md
 ```
 
