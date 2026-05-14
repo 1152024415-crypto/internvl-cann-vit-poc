@@ -220,12 +220,17 @@ Useful load stages:
 
 ```text
 load_model_read_om_start
+load_model_read_om_done
 load_model_select_hiai_f
 load_model_construct_compilation
 load_model_build_start
 load_model_create_executor
 load_model_done
 ```
+
+`load_model_read_om_done` prints `om_bytes`. `load_model_select_hiai_f`
+prints `selected_device`. Build failures include the numeric
+`OH_NN_ReturnCode` in the UI error message.
 
 ## Step 5: Run Single-Case Validation
 
@@ -407,6 +412,16 @@ update metadata, and use matching .bin files.
 ```text
 The NN runtime could not compile/load the OM. Check that the device and CANN
 runtime support this OM. Also confirm the OM file is not corrupted.
+
+If logs contain:
+
+Authentication failed, fail to authenticate model
+Authentication failed, input model cannot run by npu
+
+then the OM reached NNRt/CANN, but the NPU backend rejected it during model
+authentication. Record the exact `OH_NNCompilation_Build failed code=...`, the
+`om_bytes` value, the selected device, and the full CANN/NNRt/DLSA log section.
+This is not an ArkUI or NAPI-threading failure.
 ```
 
 `device_selection_failed`

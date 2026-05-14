@@ -59,3 +59,12 @@ class HarmonyOSDemoCannDeploymentTests(unittest.TestCase):
         self.assertIn("HIAI_F", source)
         self.assertIn("model_not_loaded", source)
         self.assertNotIn("RunOfflineModel", source)
+
+    def test_native_validator_logs_model_build_diagnostics(self) -> None:
+        source = read_text("demo/entry/src/main/cpp/validation/nn_runtime_validator.cpp")
+
+        self.assertIn("load_model_read_om_done", source)
+        self.assertIn("om_bytes=%{public}zu", source)
+        self.assertIn("selected_device=%{public}s", source)
+        self.assertIn("ReturnCodeToInt", source)
+        self.assertIn("OH_NNCompilation_Build failed code=", source)

@@ -51,6 +51,11 @@ void LogStageError(const char* stage, const std::string& message)
                  message.c_str());
 }
 
+int ReturnCodeToInt(OH_NN_ReturnCode code)
+{
+    return static_cast<int>(code);
+}
+
 const char* DeviceTypeName(OH_NN_DeviceType type)
 {
     switch (type) {
@@ -370,12 +375,16 @@ ModelStatusResult LoadModel(NativeResourceManager* resourceManager)
     if (!modelBytes.ok) {
         return ModelFail(modelBytes.errorStage, modelBytes.errorMessage, start);
     }
+    OH_LOG_Print(LOG_APP, LOG_INFO, kLogDomain, kLogTag, "stage=load_model_read_om_done om_bytes=%{public}zu",
+                 modelBytes.bytes.size());
 
     LogStage("load_model_select_hiai_f");
     DeviceSelection device = SelectHiaiFDevice();
     if (!device.ok) {
         return ModelFail("device_selection_failed", device.errorMessage, start);
     }
+    OH_LOG_Print(LOG_APP, LOG_INFO, kLogDomain, kLogTag, "stage=load_model_select_hiai_f selected_device=%{public}s",
+                 device.label.c_str());
 
     OH_NNCompilation* compilation = nullptr;
     OH_NNExecutor* executor = nullptr;
@@ -389,14 +398,19 @@ ModelStatusResult LoadModel(NativeResourceManager* resourceManager)
     OH_NN_ReturnCode code = OH_NNCompilation_SetDevice(compilation, device.id);
     if (code != OH_NN_SUCCESS) {
         DestroyCompilation(&compilation);
-        return ModelFail("device_selection_failed", "OH_NNCompilation_SetDevice failed: " + device.label, start);
+        return ModelFail("device_selection_failed",
+                         "OH_NNCompilation_SetDevice failed code=" + std::to_string(ReturnCodeToInt(code)) +
+                             " device=" + device.label,
+                         start);
     }
 
     LogStage("load_model_build_start");
     code = OH_NNCompilation_Build(compilation);
     if (code != OH_NN_SUCCESS) {
         DestroyCompilation(&compilation);
-        return ModelFail("om_compilation_failed", "OH_NNCompilation_Build failed", start);
+        return ModelFail("om_compilation_failed",
+                         "OH_NNCompilation_Build failed code=" + std::to_string(ReturnCodeToInt(code)),
+                         start);
     }
 
     LogStage("load_model_create_executor");
