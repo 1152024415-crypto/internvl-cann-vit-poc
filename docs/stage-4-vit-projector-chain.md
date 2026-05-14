@@ -2,9 +2,10 @@
 
 ## Current Status
 
-Status: ViT + projector chain is verified in PyTorch baseline and ONNX. A local
-Kirin 9030 replacement OM has been generated from a CANN-specific ONNX, but it
-still needs to be uploaded to GitHub Release and validated on device.
+Status: ViT + projector chain is verified in PyTorch baseline and ONNX. The
+Kirin 9030 replacement OM has been generated from a CANN-specific ONNX, passed
+Linux static validation, and been uploaded to GitHub Release. Device runtime
+validation is still pending.
 
 This is the chain we care about before handing image features to the LLM:
 
@@ -224,6 +225,7 @@ OMG --mode 1 OM to JSON = success
 OM JSON op count = 1167
 OM JSON input = pixel_values [1, 3, 448, 448]
 OM JSON output = Node_Output [1, 256, 1024]
+GitHub Release asset verified = yes
 ```
 
 `omg --mode 3` currently returns process exit code 1 even when the generated
@@ -272,5 +274,5 @@ ONNX projector -> OM conversion: host-side Kirin 9030 NPU-targeted conversion ge
 OM runtime inference: not verified yet
 ```
 
-The next step is to upload the replacement `.om` to GitHub Release, copy it into
-the yellow-zone HarmonyOS app rawfile directory, and rerun device validation.
+The next step is to copy the Release `.om` into the yellow-zone HarmonyOS app
+rawfile directory and rerun device validation.

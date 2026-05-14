@@ -37,23 +37,23 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.onnx
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
 
-As of 2026-05-14, the old uploaded `.om` is known to be a CPU-only OM from the
-OMG log:
+The original 2026-05-13 uploaded `.om` was a CPU-only OM from the OMG log:
 
 ```text
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-Do not use that old release OM as proof of NPU runtime validation. Yellow-zone
-runtime already confirmed it can be read and that `HIAI_F` can be selected, but
-`OH_NNCompilation_Build` rejects the model during authentication.
+That old OM must not be used as proof of NPU runtime validation. Yellow-zone
+runtime already confirmed it could be read and that `HIAI_F` could be selected,
+but `OH_NNCompilation_Build` rejected it during authentication.
 
-A local replacement OM is ready for manual upload:
+As of 2026-05-14, the GitHub Release `.om` has been replaced and verified:
 
 ```text
-artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
+release asset = internvl3_5_vit_projector_fp32_opset18_staticpos.om
 size = 1236219952 bytes
 SHA256 = 8D081689805763B786BE003B5627061DFB9324EDF3DF7DF0226C8F5A9C093FA7
+GitHub digest = sha256:8d081689805763b786be003b5627061dfb9324edf3df7df0226c8f5a9c093fa7
 source ONNX = artifacts/onnx/internvl3_5_vit_projector_fp32_opset18_staticpos_cann.onnx
 OMG platform = kirin9030
 AI_NPUCL lines = 21
@@ -65,8 +65,7 @@ OM JSON input = pixel_values [1, 3, 448, 448]
 OM JSON output = Node_Output [1, 256, 1024]
 ```
 
-Upload this replacement OM to GitHub Release before running the device
-validation steps below.
+Download this Release OM before running the device validation steps below.
 
 The yellow-zone runtime demo also uses these raw fp32 validation tensors:
 

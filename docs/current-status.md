@@ -56,7 +56,7 @@ cat cosine vs PyTorch = 1.0000001192092896
 SHA256 = 215A6248B2C5A259A531472210E31282791F50945917CEF6419A238C19E893C2
 ```
 
-Local replacement OM conversion:
+Release OM artifact:
 
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
@@ -71,6 +71,8 @@ Linux static validation = pass
 precheck report = success, pass 1096, fail 0
 OM JSON input = pixel_values [1, 3, 448, 448]
 OM JSON output = Node_Output [1, 256, 1024]
+GitHub Release upload verified = yes
+GitHub asset digest = sha256:8d081689805763b786be003b5627061dfb9324edf3df7df0226c8f5a9c093fa7
 ```
 
 Release assets uploaded:
@@ -81,10 +83,8 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.om
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
 
-Important: the currently uploaded Release `.om` is the old CPU-only asset and
-is not a valid NPU validation asset. A local replacement OM has been generated
-from the CANN-specific ONNX with Kirin 9030 platform evidence, but it has not
-been uploaded to GitHub Release yet.
+Important: the uploaded Release `.om` now matches the Linux-validated Kirin
+9030 replacement OM. It is ready for yellow-zone HarmonyOS device validation.
 
 Small tracked artifact metadata:
 
@@ -131,7 +131,6 @@ do not execute on the ArkUI event thread.
 Device-side work still pending:
 
 ```text
-upload replacement OM
 compile/install on a yellow-zone physical HarmonyOS device
 confirm HIAI_F / NPU placement with the replacement OM
 confirm OH_NNExecutor_RunSync succeeds

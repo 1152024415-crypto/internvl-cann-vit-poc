@@ -9,36 +9,21 @@ Current release:
 https://github.com/1152024415-crypto/internvl-cann-vit-poc/releases/tag/v0.1.0-artifacts
 ```
 
-## Current OM Replacement Status
+## Current OM Asset Status
 
-As of 2026-05-14, the Release asset named below is stale:
+As of 2026-05-14, the Release asset named below has been replaced and verified
+through the GitHub Release API:
 
 ```text
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
 ```
 
-The uploaded file was generated before the Kirin 9030 platform plugin and
-CANN-specific ONNX surgery were added. The yellow-zone device run showed that
-old file could be read and `HIAI_F` could be selected, but
-`OH_NNCompilation_Build` rejected it because the host OMG log showed:
+Verified asset metadata:
 
 ```text
-partition type NPU:0, CPU:1, GPU:0, ISP:0
-```
-
-Replace the Release asset manually with this local file:
-
-```text
-artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
 size = 1236219952 bytes
 SHA256 = 8D081689805763B786BE003B5627061DFB9324EDF3DF7DF0226C8F5A9C093FA7
-```
-
-Keep the asset name unchanged so the yellow-zone runbook and app packaging
-steps continue to work:
-
-```text
-internvl3_5_vit_projector_fp32_opset18_staticpos.om
+GitHub digest = sha256:8d081689805763b786be003b5627061dfb9324edf3df7df0226c8f5a9c093fa7
 ```
 
 The replacement OM was generated from:
