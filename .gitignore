@@ -13,6 +13,8 @@ artifacts/
 demo/entry/src/main/resources/rawfile/*.om
 demo/entry/src/main/resources/rawfile/*.bin
 !demo/entry/src/main/resources/rawfile/official_squeezenet_hiai.om
+!demo/entry/src/main/resources/rawfile/official_cup_bgr_227.bin
+!demo/entry/src/main/resources/rawfile/official_guitar_bgr_227.bin
 !demo/entry/src/main/resources/rawfile/dog_pixel_values_fp32.bin
 !demo/entry/src/main/resources/rawfile/dog_visual_tokens_fp32.bin
 !demo/entry/src/main/resources/rawfile/cat_pixel_values_fp32.bin

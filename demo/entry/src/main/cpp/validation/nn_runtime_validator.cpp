@@ -32,6 +32,9 @@ constexpr unsigned int kLogDomain = 0x0000;
 constexpr const char* kLogTag = "InternVLNative";
 constexpr const char* kRequiredNpuName = "HIAI_F";
 constexpr const char* kOfficialSampleModelFile = "official_squeezenet_hiai.om";
+constexpr const char* kOfficialLabelsFile = "official_labels_caffe.txt";
+constexpr std::size_t kOfficialInputByteCount = 3 * 227 * 227;
+constexpr int kOfficialTopK = 3;
 
 std::mutex gRuntimeMutex;
 OH_NNExecutor* gExecutor = nullptr;
@@ -48,6 +51,21 @@ struct DeviceSelection {
 struct OutputShapeCheck {
     bool ok = false;
     std::string shape;
+};
+
+struct OfficialImageInput {
+    const char* name;
+    const char* inputFile;
+};
+
+struct OfficialTopLabel {
+    std::string label;
+    float score = 0.0f;
+};
+
+constexpr OfficialImageInput kOfficialImageInputs[] = {
+    {"official_guitar", "official_guitar_bgr_227.bin"},
+    {"official_cup", "official_cup_bgr_227.bin"},
 };
 
 void LogStage(const char* stage)
@@ -228,12 +246,87 @@ OfficialSmokeResult OfficialSmokeFail(const std::string& stage,
     return result;
 }
 
+OfficialClassificationResult OfficialClassificationFail(const std::string& imageName,
+                                                        const std::string& stage,
+                                                        const std::string& message,
+                                                        const std::chrono::steady_clock::time_point& start,
+                                                        const std::string& deviceLabel,
+                                                        std::size_t inputByteCount)
+{
+    const auto end = std::chrono::steady_clock::now();
+    OfficialClassificationResult result;
+    result.imageName = imageName;
+    result.deviceType = deviceLabel;
+    result.errorStage = stage;
+    result.errorMessage = message;
+    result.inputByteCount = inputByteCount;
+    result.latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
+    LogStageError(stage.c_str(), message);
+    return result;
+}
+
 void DestroyExecutor(OH_NNExecutor** executor)
 {
     if (executor != nullptr && *executor != nullptr) {
         OH_NNExecutor_Destroy(executor);
         *executor = nullptr;
     }
+}
+
+const OfficialImageInput* FindOfficialImageInput(const std::string& imageName)
+{
+    for (const auto& imageInput : kOfficialImageInputs) {
+        if (imageName == imageInput.name) {
+            return &imageInput;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<std::string> ParseOfficialLabels(const std::vector<std::uint8_t>& labelBytes)
+{
+    std::vector<std::string> labels;
+    std::string current;
+    for (std::uint8_t byte : labelBytes) {
+        const char ch = static_cast<char>(byte);
+        if (ch == '\r') {
+            continue;
+        }
+        if (ch == '\n') {
+            labels.push_back(current);
+            current.clear();
+            continue;
+        }
+        current.push_back(ch);
+    }
+    if (!current.empty()) {
+        labels.push_back(current);
+    }
+    return labels;
+}
+
+std::vector<OfficialTopLabel> TopKOfficialLabels(std::vector<float> output,
+                                                 const std::vector<std::string>& labels,
+                                                 int topK)
+{
+    std::vector<OfficialTopLabel> topLabels;
+    for (int rank = 0; rank < topK && !output.empty(); ++rank) {
+        std::size_t bestIndex = 0;
+        float bestScore = output[0];
+        for (std::size_t index = 1; index < output.size(); ++index) {
+            if (output[index] > bestScore) {
+                bestIndex = index;
+                bestScore = output[index];
+            }
+        }
+
+        OfficialTopLabel topLabel;
+        topLabel.label = bestIndex < labels.size() ? labels[bestIndex] : "label_" + std::to_string(bestIndex);
+        topLabel.score = bestScore;
+        topLabels.push_back(topLabel);
+        output[bestIndex] = 0.0f;
+    }
+    return topLabels;
 }
 
 void DestroyCompilation(OH_NNCompilation** compilation)
@@ -706,6 +799,187 @@ OfficialSmokeResult RunOfficialSmoke(napi_env env, napi_value resourceManager)
 {
     NativeResourceManager* nativeResourceManager = OH_ResourceManager_InitNativeResourceManager(env, resourceManager);
     OfficialSmokeResult result = RunOfficialSmoke(nativeResourceManager);
+    if (nativeResourceManager != nullptr) {
+        OH_ResourceManager_ReleaseNativeResourceManager(nativeResourceManager);
+    }
+    return result;
+}
+
+OfficialClassificationResult RunOfficialClassification(NativeResourceManager* resourceManager,
+                                                       const std::string& imageName)
+{
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    const auto start = std::chrono::steady_clock::now();
+    std::string deviceLabel;
+    std::size_t inputByteCount = 0;
+
+    OH_NNCompilation* compilation = nullptr;
+    OH_NNExecutor* executor = nullptr;
+    NN_TensorDesc* inputDesc = nullptr;
+    NN_TensorDesc* outputDesc = nullptr;
+    NN_Tensor* inputTensor = nullptr;
+    NN_Tensor* outputTensor = nullptr;
+
+    auto cleanup = [&]() {
+        DestroyTensor(&outputTensor);
+        DestroyTensor(&inputTensor);
+        DestroyTensorDesc(&outputDesc);
+        DestroyTensorDesc(&inputDesc);
+        DestroyExecutor(&executor);
+        DestroyCompilation(&compilation);
+    };
+    auto fail = [&](const std::string& stage, const std::string& message) {
+        cleanup();
+        return OfficialClassificationFail(imageName, stage, message, start, deviceLabel, inputByteCount);
+    };
+
+    const OfficialImageInput* imageInput = FindOfficialImageInput(imageName);
+    if (imageInput == nullptr) {
+        return fail("official_classification_bad_image", "Unknown official image: " + imageName);
+    }
+
+    auto modelBytes = ReadRawfile(resourceManager, kOfficialSampleModelFile);
+    if (!modelBytes.ok) {
+        return fail(modelBytes.errorStage, modelBytes.errorMessage);
+    }
+
+    auto inputBytes = ReadRawfile(resourceManager, imageInput->inputFile);
+    if (!inputBytes.ok) {
+        return fail(inputBytes.errorStage, inputBytes.errorMessage);
+    }
+    inputByteCount = inputBytes.bytes.size();
+    if (inputByteCount != kOfficialInputByteCount) {
+        return fail("official_classification_input_mismatch",
+                    "Official image input must be 3x227x227 uint8 BGR planar");
+    }
+
+    auto labelBytes = ReadRawfile(resourceManager, kOfficialLabelsFile);
+    if (!labelBytes.ok) {
+        return fail(labelBytes.errorStage, labelBytes.errorMessage);
+    }
+    const std::vector<std::string> labels = ParseOfficialLabels(labelBytes.bytes);
+    if (labels.empty()) {
+        return fail("official_classification_labels_failed", "Official labels file is empty");
+    }
+
+    LogStage("official_classification_select_hiai_f");
+    DeviceSelection device = SelectHiaiFDevice();
+    if (!device.ok) {
+        return fail("device_selection_failed", device.errorMessage);
+    }
+    deviceLabel = device.label;
+
+    LogStage("official_classification_construct_compilation");
+    LogHiaiCompatibility(modelBytes.bytes);
+    compilation = OH_NNCompilation_ConstructWithOfflineModelBuffer(modelBytes.bytes.data(), modelBytes.bytes.size());
+    if (compilation == nullptr) {
+        return fail("official_classification_compilation_failed",
+                    "OH_NNCompilation_ConstructWithOfflineModelBuffer failed");
+    }
+
+    OH_NN_ReturnCode code = OH_NNCompilation_SetDevice(compilation, device.id);
+    if (code != OH_NN_SUCCESS) {
+        return fail("device_selection_failed",
+                    "OH_NNCompilation_SetDevice failed code=" + std::to_string(ReturnCodeToInt(code)) +
+                        " device=" + deviceLabel);
+    }
+
+    LogStage("official_classification_set_hiai_build_options");
+    code = SetOfficialHiaiBuildOptions(compilation);
+    if (code != OH_NN_SUCCESS) {
+        return fail("hiai_build_options_failed",
+                    "Official HiAI build option setup failed code=" + std::to_string(ReturnCodeToInt(code)));
+    }
+
+    LogStage("official_classification_build_start");
+    code = OH_NNCompilation_Build(compilation);
+    if (code != OH_NN_SUCCESS) {
+        return fail("official_classification_compilation_failed",
+                    "OH_NNCompilation_Build failed code=" + std::to_string(ReturnCodeToInt(code)));
+    }
+
+    executor = OH_NNExecutor_Construct(compilation);
+    if (executor == nullptr) {
+        return fail("official_classification_executor_failed", "OH_NNExecutor_Construct failed");
+    }
+
+    inputDesc = OH_NNExecutor_CreateInputTensorDesc(executor, 0);
+    outputDesc = OH_NNExecutor_CreateOutputTensorDesc(executor, 0);
+    if (inputDesc == nullptr || outputDesc == nullptr) {
+        return fail("official_classification_tensor_failed", "Failed to create official tensor descriptors");
+    }
+
+    inputTensor = OH_NNTensor_Create(device.id, inputDesc);
+    outputTensor = OH_NNTensor_Create(device.id, outputDesc);
+    DestroyTensorDesc(&outputDesc);
+    DestroyTensorDesc(&inputDesc);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return fail("official_classification_tensor_failed", "Failed to create official tensors");
+    }
+
+    void* inputBuffer = OH_NNTensor_GetDataBuffer(inputTensor);
+    std::size_t tensorInputByteCount = 0;
+    code = OH_NNTensor_GetSize(inputTensor, &tensorInputByteCount);
+    if (code != OH_NN_SUCCESS || inputBuffer == nullptr ||
+        tensorInputByteCount != inputBytes.bytes.size() * sizeof(float)) {
+        return fail("official_classification_tensor_failed", "Official input tensor size mismatch");
+    }
+    std::vector<float> inputFloats(inputBytes.bytes.size(), 0.0f);
+    for (std::size_t index = 0; index < inputBytes.bytes.size(); ++index) {
+        inputFloats[index] = static_cast<float>(inputBytes.bytes[index]);
+    }
+    std::memcpy(inputBuffer, inputFloats.data(), tensorInputByteCount);
+
+    NN_Tensor* inputTensors[] = {inputTensor};
+    NN_Tensor* outputTensors[] = {outputTensor};
+    LogStage("official_classification_run_sync_start");
+    code = OH_NNExecutor_RunSync(executor, inputTensors, 1, outputTensors, 1);
+    if (code != OH_NN_SUCCESS) {
+        return fail("official_classification_run_sync_failed",
+                    "OH_NNExecutor_RunSync failed code=" + std::to_string(ReturnCodeToInt(code)));
+    }
+
+    void* outputBuffer = OH_NNTensor_GetDataBuffer(outputTensor);
+    std::size_t outputByteCount = 0;
+    code = OH_NNTensor_GetSize(outputTensor, &outputByteCount);
+    if (code != OH_NN_SUCCESS || outputBuffer == nullptr || outputByteCount == 0 ||
+        outputByteCount % sizeof(float) != 0) {
+        return fail("official_classification_tensor_failed", "Failed to get official output buffer");
+    }
+    std::vector<float> output(outputByteCount / sizeof(float), 0.0f);
+    std::memcpy(output.data(), outputBuffer, outputByteCount);
+
+    std::vector<OfficialTopLabel> topLabels = TopKOfficialLabels(output, labels, kOfficialTopK);
+    if (topLabels.size() != static_cast<std::size_t>(kOfficialTopK)) {
+        return fail("official_classification_result_failed", "Failed to compute official top labels");
+    }
+
+    cleanup();
+
+    const auto end = std::chrono::steady_clock::now();
+    OfficialClassificationResult result;
+    result.ok = true;
+    result.imageName = imageName;
+    result.deviceType = deviceLabel;
+    result.latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
+    result.inputByteCount = inputByteCount;
+    result.outputElementCount = output.size();
+    result.top1Label = topLabels[0].label;
+    result.top1Score = topLabels[0].score;
+    result.top2Label = topLabels[1].label;
+    result.top2Score = topLabels[1].score;
+    result.top3Label = topLabels[2].label;
+    result.top3Score = topLabels[2].score;
+    LogStage("official_classification_done");
+    return result;
+}
+
+OfficialClassificationResult RunOfficialClassification(napi_env env,
+                                                       napi_value resourceManager,
+                                                       const std::string& imageName)
+{
+    NativeResourceManager* nativeResourceManager = OH_ResourceManager_InitNativeResourceManager(env, resourceManager);
+    OfficialClassificationResult result = RunOfficialClassification(nativeResourceManager, imageName);
     if (nativeResourceManager != nullptr) {
         OH_ResourceManager_ReleaseNativeResourceManager(nativeResourceManager);
     }

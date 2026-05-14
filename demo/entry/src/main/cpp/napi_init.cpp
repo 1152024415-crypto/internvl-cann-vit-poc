@@ -15,6 +15,7 @@ enum class AsyncOperation {
     LoadModel,
     UnloadModel,
     RunOfficialSmoke,
+    RunOfficialClassification,
     RunOnce,
     RunStability,
 };
@@ -28,6 +29,7 @@ struct AsyncContext {
     int repeatCount = 20;
     internvl::ModelStatusResult modelResult;
     internvl::OfficialSmokeResult officialSmokeResult;
+    internvl::OfficialClassificationResult officialClassificationResult;
     internvl::RunResult runResult;
     internvl::StabilityResult stabilityResult;
 };
@@ -60,6 +62,14 @@ internvl::StabilityResult StabilityArgError(const std::string& message)
 internvl::OfficialSmokeResult OfficialSmokeArgError(const std::string& message)
 {
     internvl::OfficialSmokeResult result;
+    result.errorStage = "napi_arg_error";
+    result.errorMessage = message;
+    return result;
+}
+
+internvl::OfficialClassificationResult OfficialClassificationArgError(const std::string& message)
+{
+    internvl::OfficialClassificationResult result;
     result.errorStage = "napi_arg_error";
     result.errorMessage = message;
     return result;
@@ -110,6 +120,8 @@ napi_value ErrorResultToNapiValue(napi_env env, AsyncOperation operation, const 
             return internvl::ToNapiValue(env, ModelArgError(message));
         case AsyncOperation::RunOfficialSmoke:
             return internvl::ToNapiValue(env, OfficialSmokeArgError(message));
+        case AsyncOperation::RunOfficialClassification:
+            return internvl::ToNapiValue(env, OfficialClassificationArgError(message));
         case AsyncOperation::RunStability:
             return internvl::ToNapiValue(env, StabilityArgError(message));
         case AsyncOperation::RunOnce:
@@ -153,6 +165,10 @@ void ExecuteAsync(napi_env env, void* data)
         case AsyncOperation::RunOfficialSmoke:
             context->officialSmokeResult = internvl::RunOfficialSmoke(context->resourceManager);
             break;
+        case AsyncOperation::RunOfficialClassification:
+            context->officialClassificationResult =
+                internvl::RunOfficialClassification(context->resourceManager, context->caseName);
+            break;
         case AsyncOperation::RunStability:
             context->stabilityResult = internvl::RunStability(
                 context->resourceManager, context->caseName, context->repeatCount);
@@ -178,6 +194,9 @@ void CompleteAsync(napi_env env, napi_status status, void* data)
                 break;
             case AsyncOperation::RunOfficialSmoke:
                 value = internvl::ToNapiValue(env, context->officialSmokeResult);
+                break;
+            case AsyncOperation::RunOfficialClassification:
+                value = internvl::ToNapiValue(env, context->officialClassificationResult);
                 break;
             case AsyncOperation::RunStability:
                 value = internvl::ToNapiValue(env, context->stabilityResult);
@@ -286,6 +305,39 @@ napi_value RunOfficialSmoke(napi_env env, napi_callback_info info)
     return QueueAsync(env, context, "InternVLOfficialSmoke");
 }
 
+napi_value RunOfficialClassification(napi_env env, napi_callback_info info)
+{
+    std::size_t argc = 2;
+    napi_value args[2] = {nullptr, nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc < 2 || !IsObjectArg(env, args[0])) {
+        return CreateResolvedPromise(
+            env, internvl::ToNapiValue(
+                env, OfficialClassificationArgError("runOfficialClassification requires resourceManager and imageName")));
+    }
+
+    std::string imageName;
+    if (!ReadStringArg(env, args[1], imageName)) {
+        return CreateResolvedPromise(
+            env, internvl::ToNapiValue(
+                env, OfficialClassificationArgError("runOfficialClassification imageName must be a string")));
+    }
+
+    NativeResourceManager* resourceManager = OH_ResourceManager_InitNativeResourceManager(env, args[0]);
+    if (resourceManager == nullptr) {
+        return CreateResolvedPromise(
+            env, internvl::ToNapiValue(
+                env, OfficialClassificationArgError("Failed to initialize NativeResourceManager")));
+    }
+
+    auto* context = new AsyncContext();
+    context->operation = AsyncOperation::RunOfficialClassification;
+    context->resourceManager = resourceManager;
+    context->caseName = imageName;
+    return QueueAsync(env, context, "InternVLOfficialClassification");
+}
+
 napi_value RunOnce(napi_env env, napi_callback_info info)
 {
     std::size_t argc = 2;
@@ -363,6 +415,8 @@ static napi_value Init(napi_env env, napi_value exports)
         {"loadModel", nullptr, LoadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"unloadModel", nullptr, UnloadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runOfficialSmoke", nullptr, RunOfficialSmoke, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"runOfficialClassification", nullptr, RunOfficialClassification, nullptr, nullptr, nullptr, napi_default,
+         nullptr},
         {"runOnce", nullptr, RunOnce, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runStability", nullptr, RunStability, nullptr, nullptr, nullptr, napi_default, nullptr},
     };

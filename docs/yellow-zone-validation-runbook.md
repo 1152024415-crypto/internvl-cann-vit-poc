@@ -309,6 +309,38 @@ before debugging the InternVL OM. If `Official Smoke` passes but `Load Model`
 fails, the current failure is specific to the InternVL OM or its conversion
 settings.
 
+After smoke passes, run the official image classifier:
+
+```text
+Tap Guitar or Cup
+Tap Official Classify
+```
+
+The UI displays the official sample images from `resources/base/media` and the
+native side runs their preprocessed 227 x 227 BGR planar inputs:
+
+```text
+official_guitar_bgr_227.bin
+official_cup_bgr_227.bin
+official_labels_caffe.txt
+```
+
+A passing classifier run should show:
+
+```text
+ok: true
+image: official_guitar or official_cup
+device: name=HIAI_F type=ACCELERATOR
+input_bytes: 154587
+output_elements: > 0
+top1: ...
+top2: ...
+top3: ...
+```
+
+Use this result only to prove that the official CANN sample can perform real
+inference in our app. It is not part of the InternVL accuracy baseline.
+
 First load and compile the OM:
 
 ```text

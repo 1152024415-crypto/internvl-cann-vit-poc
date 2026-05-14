@@ -107,6 +107,7 @@ listTestCases()
 loadModel(resourceManager)
 unloadModel()
 runOfficialSmoke(resourceManager)
+runOfficialClassification(resourceManager, imageName)
 runOnce(resourceManager, caseName)
 runStability(resourceManager, caseName, repeatCount)
 ```
@@ -156,4 +157,6 @@ float32 tensor
 The raw fp32 validation tensors are tracked in git, so yellow-zone validation
 only needs the checked-out code plus the Release `.om` file. The official
 SqueezeNet CANN sample OM is also tracked in git as
-`official_squeezenet_hiai.om` for a small known-good runtime smoke test.
+`official_squeezenet_hiai.om` for a small known-good runtime smoke test. The
+official `cup` and `guitar` images, labels, and generated 227 x 227 BGR inputs
+are tracked as a second known-good classification check.

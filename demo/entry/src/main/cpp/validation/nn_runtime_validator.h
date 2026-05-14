@@ -60,6 +60,23 @@ struct OfficialSmokeResult {
     std::size_t outputByteCount = 0;
 };
 
+struct OfficialClassificationResult {
+    bool ok = false;
+    std::string imageName;
+    std::string deviceType;
+    std::string errorStage;
+    std::string errorMessage;
+    double latencyMs = 0.0;
+    std::size_t inputByteCount = 0;
+    std::size_t outputElementCount = 0;
+    std::string top1Label;
+    double top1Score = 0.0;
+    std::string top2Label;
+    double top2Score = 0.0;
+    std::string top3Label;
+    double top3Score = 0.0;
+};
+
 std::vector<std::string> ListTestCaseNames();
 ModelStatusResult LoadModel(NativeResourceManager* resourceManager);
 ModelStatusResult LoadModel(napi_env env, napi_value resourceManager);
@@ -67,6 +84,11 @@ ModelStatusResult UnloadModel();
 bool IsModelLoaded();
 OfficialSmokeResult RunOfficialSmoke(NativeResourceManager* resourceManager);
 OfficialSmokeResult RunOfficialSmoke(napi_env env, napi_value resourceManager);
+OfficialClassificationResult RunOfficialClassification(NativeResourceManager* resourceManager,
+                                                       const std::string& imageName);
+OfficialClassificationResult RunOfficialClassification(napi_env env,
+                                                       napi_value resourceManager,
+                                                       const std::string& imageName);
 RunResult RunOnce(NativeResourceManager* resourceManager, const std::string& caseName);
 RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& caseName);
 StabilityResult RunStability(NativeResourceManager* resourceManager, const std::string& caseName, int repeatCount);

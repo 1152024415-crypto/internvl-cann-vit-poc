@@ -99,3 +99,41 @@ class HarmonyOSDemoCannDeploymentTests(unittest.TestCase):
         self.assertIn("async runOfficialSmoke(): Promise<void>", ui)
         self.assertIn("await testNapi.runOfficialSmoke", ui)
         self.assertIn("Official Smoke", ui)
+
+    def test_official_sample_images_and_classification_path_are_packaged(self) -> None:
+        official_cup = ROOT / "demo/entry/src/main/resources/base/media/official_cup.jpg"
+        official_guitar = ROOT / "demo/entry/src/main/resources/base/media/official_guitar.jpg"
+        official_labels = ROOT / "demo/entry/src/main/resources/rawfile/official_labels_caffe.txt"
+        official_cup_input = ROOT / "demo/entry/src/main/resources/rawfile/official_cup_bgr_227.bin"
+        official_guitar_input = ROOT / "demo/entry/src/main/resources/rawfile/official_guitar_bgr_227.bin"
+
+        self.assertEqual(official_cup.stat().st_size, 24_566)
+        self.assertEqual(official_guitar.stat().st_size, 965_265)
+        self.assertEqual(official_labels.stat().st_size, 22_673)
+        self.assertEqual(official_cup_input.stat().st_size, 154_587)
+        self.assertEqual(official_guitar_input.stat().st_size, 154_587)
+
+        labels = official_labels.read_text(encoding="utf-8")
+        self.assertIn("acoustic guitar", labels)
+        self.assertIn("cup", labels)
+
+        typings = read_text("demo/entry/src/main/cpp/types/libentry/Index.d.ts")
+        self.assertIn("export interface OfficialClassificationResult", typings)
+        self.assertIn(
+            "runOfficialClassification: (resourceManager: object, imageName: string) "
+            "=> Promise<OfficialClassificationResult>",
+            typings,
+        )
+
+        validator = read_text("demo/entry/src/main/cpp/validation/nn_runtime_validator.cpp")
+        self.assertIn("OfficialClassificationResult RunOfficialClassification", validator)
+        self.assertIn('kOfficialLabelsFile = "official_labels_caffe.txt"', validator)
+        self.assertIn("official_guitar", validator)
+        self.assertIn("official_cup", validator)
+        self.assertIn("TopKOfficialLabels", validator)
+
+        ui = read_text("demo/entry/src/main/ets/pages/Index.ets")
+        self.assertIn("$r('app.media.official_guitar')", ui)
+        self.assertIn("$r('app.media.official_cup')", ui)
+        self.assertIn("Official Classify", ui)
+        self.assertIn("await testNapi.runOfficialClassification", ui)

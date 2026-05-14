@@ -1,5 +1,11 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import testNapi, { ModelStatusResult, OfficialSmokeResult, RunResult, StabilityResult } from 'libentry.so';
+import testNapi, {
+  ModelStatusResult,
+  OfficialClassificationResult,
+  OfficialSmokeResult,
+  RunResult,
+  StabilityResult
+} from 'libentry.so';
 
 const DOMAIN = 0x0000;
 const TAG = 'InternVLValidation';
@@ -11,6 +17,8 @@ struct Index {
   @State cases: string[] = [];
   @State busy: boolean = false;
   @State modelLoaded: boolean = false;
+  @State officialImageName: string = 'official_guitar';
+  @State officialImage: Resource = $r('app.media.official_guitar');
   @State status: string = 'Ready';
   @State modelText: string = '';
   @State runText: string = '';
@@ -52,6 +60,22 @@ struct Index {
       `output_count: ${result.outputCount}`,
       `input_bytes: ${result.inputByteCount}`,
       `output_bytes: ${result.outputByteCount}`,
+      `error_stage: ${result.errorStage}`,
+      `error_message: ${result.errorMessage}`
+    ].join('\n');
+  }
+
+  formatOfficialClassification(result: OfficialClassificationResult): string {
+    return [
+      `ok: ${result.ok}`,
+      `image: ${result.imageName}`,
+      `device: ${result.deviceType}`,
+      `latency: ${result.latencyMs} ms`,
+      `input_bytes: ${result.inputByteCount}`,
+      `output_elements: ${result.outputElementCount}`,
+      `top1: ${result.top1Label} (${result.top1Score})`,
+      `top2: ${result.top2Label} (${result.top2Score})`,
+      `top3: ${result.top3Label} (${result.top3Score})`,
       `error_stage: ${result.errorStage}`,
       `error_message: ${result.errorMessage}`
     ].join('\n');
@@ -161,6 +185,38 @@ struct Index {
     }
   }
 
+  selectOfficialImage(imageName: string): void {
+    this.officialImageName = imageName;
+    this.officialImage = imageName === 'official_cup'
+      ? $r('app.media.official_cup')
+      : $r('app.media.official_guitar');
+    this.status = `Selected ${imageName}`;
+  }
+
+  async runOfficialClassification(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+
+    this.busy = true;
+    this.status = `Running official classification for ${this.officialImageName}...`;
+    try {
+      const result = await testNapi.runOfficialClassification(
+        getContext(this).resourceManager, this.officialImageName);
+      this.modelText = this.formatOfficialClassification(result);
+      this.status = result.ok ? 'Official classification passed' : 'Official classification failed';
+      hilog.info(DOMAIN, TAG, 'runOfficialClassification %{public}s ok=%{public}s',
+        this.officialImageName, `${result.ok}`);
+    } catch (error) {
+      const message = `${error}`;
+      this.status = 'Official classification error';
+      this.modelText = message;
+      hilog.error(DOMAIN, TAG, 'runOfficialClassification error: %{public}s', message);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   async runOnce(): Promise<void> {
     if (this.busy) {
       return;
@@ -264,6 +320,32 @@ struct Index {
           })
       }
       .width('100%')
+
+      Row({ space: 12 }) {
+        Button('Guitar')
+          .enabled(!this.busy)
+          .onClick(() => {
+            this.selectOfficialImage('official_guitar');
+          })
+
+        Button('Cup')
+          .enabled(!this.busy)
+          .onClick(() => {
+            this.selectOfficialImage('official_cup');
+          })
+
+        Button('Official Classify')
+          .enabled(!this.busy)
+          .onClick(() => {
+            this.runOfficialClassification();
+          })
+      }
+      .width('100%')
+
+      Image(this.officialImage)
+        .width('100%')
+        .height(160)
+        .objectFit(ImageFit.Contain)
 
       Row({ space: 12 }) {
         Button('Run Once')

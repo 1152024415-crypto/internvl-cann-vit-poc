@@ -97,6 +97,27 @@ napi_value ToNapiValue(napi_env env, const OfficialSmokeResult& result)
     return object;
 }
 
+napi_value ToNapiValue(napi_env env, const OfficialClassificationResult& result)
+{
+    napi_value object;
+    napi_create_object(env, &object);
+    SetBool(env, object, "ok", result.ok);
+    SetString(env, object, "imageName", result.imageName);
+    SetString(env, object, "deviceType", result.deviceType);
+    SetString(env, object, "errorStage", result.errorStage);
+    SetString(env, object, "errorMessage", result.errorMessage);
+    SetNumber(env, object, "latencyMs", result.latencyMs);
+    SetNumber(env, object, "inputByteCount", static_cast<double>(result.inputByteCount));
+    SetNumber(env, object, "outputElementCount", static_cast<double>(result.outputElementCount));
+    SetString(env, object, "top1Label", result.top1Label);
+    SetNumber(env, object, "top1Score", result.top1Score);
+    SetString(env, object, "top2Label", result.top2Label);
+    SetNumber(env, object, "top2Score", result.top2Score);
+    SetString(env, object, "top3Label", result.top3Label);
+    SetNumber(env, object, "top3Score", result.top3Score);
+    return object;
+}
+
 napi_value StringArrayToNapiValue(napi_env env, const std::vector<std::string>& values)
 {
     napi_value array;
