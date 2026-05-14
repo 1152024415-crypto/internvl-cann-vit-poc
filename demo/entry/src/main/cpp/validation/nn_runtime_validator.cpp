@@ -4,6 +4,7 @@
 #include "tensor_metrics.h"
 #include "validation_constants.h"
 
+#include "hilog/log.h"
 #include "neural_network_runtime/neural_network_core.h"
 
 #include <algorithm>
@@ -11,11 +12,21 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <sstream>
 
 namespace internvl {
 
 namespace {
+
+constexpr unsigned int kLogDomain = 0x0000;
+constexpr const char* kLogTag = "InternVLNative";
+constexpr const char* kRequiredNpuName = "HIAI_F";
+
+std::mutex gRuntimeMutex;
+OH_NNExecutor* gExecutor = nullptr;
+size_t gDeviceId = 0;
+std::string gDeviceLabel;
 
 struct DeviceSelection {
     bool ok = false;
@@ -28,6 +39,17 @@ struct OutputShapeCheck {
     bool ok = false;
     std::string shape;
 };
+
+void LogStage(const char* stage)
+{
+    OH_LOG_Print(LOG_APP, LOG_INFO, kLogDomain, kLogTag, "stage=%{public}s", stage);
+}
+
+void LogStageError(const char* stage, const std::string& message)
+{
+    OH_LOG_Print(LOG_APP, LOG_ERROR, kLogDomain, kLogTag, "stage=%{public}s error=%{public}s", stage,
+                 message.c_str());
+}
 
 const char* DeviceTypeName(OH_NN_DeviceType type)
 {
@@ -62,7 +84,7 @@ std::string MakeDeviceLabel(size_t deviceId)
     return label.str();
 }
 
-DeviceSelection SelectDevice()
+DeviceSelection SelectHiaiFDevice()
 {
     const size_t* deviceIds = nullptr;
     uint32_t deviceCount = 0;
@@ -74,10 +96,16 @@ DeviceSelection SelectDevice()
         return selection;
     }
 
+    std::ostringstream available;
     for (uint32_t index = 0; index < deviceCount; ++index) {
-        OH_NN_DeviceType deviceType = OH_NN_OTHERS;
-        if (OH_NNDevice_GetType(deviceIds[index], &deviceType) == OH_NN_SUCCESS &&
-            deviceType == OH_NN_ACCELERATOR) {
+        if (index > 0) {
+            available << "; ";
+        }
+        available << MakeDeviceLabel(deviceIds[index]);
+
+        const char* deviceName = nullptr;
+        if (OH_NNDevice_GetName(deviceIds[index], &deviceName) == OH_NN_SUCCESS && deviceName != nullptr &&
+            std::string(deviceName) == kRequiredNpuName) {
             selection.ok = true;
             selection.id = deviceIds[index];
             selection.label = MakeDeviceLabel(selection.id);
@@ -85,9 +113,8 @@ DeviceSelection SelectDevice()
         }
     }
 
-    selection.ok = true;
-    selection.id = deviceIds[0];
-    selection.label = MakeDeviceLabel(selection.id);
+    selection.errorMessage = std::string(kRequiredNpuName) + " device not found. Available devices: " +
+                             available.str();
     return selection;
 }
 
@@ -107,6 +134,21 @@ RunResult Fail(const std::string& caseName, const std::string& stage, const std:
     result.caseName = caseName;
     result.errorStage = stage;
     result.errorMessage = message;
+    return result;
+}
+
+ModelStatusResult ModelFail(const std::string& stage,
+                            const std::string& message,
+                            const std::chrono::steady_clock::time_point& start)
+{
+    const auto end = std::chrono::steady_clock::now();
+    ModelStatusResult result;
+    result.loaded = gExecutor != nullptr;
+    result.deviceType = gDeviceLabel;
+    result.errorStage = stage;
+    result.errorMessage = message;
+    result.latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
+    LogStageError(stage.c_str(), message);
     return result;
 }
 
@@ -203,83 +245,56 @@ MetricsResult ValidateMetadata(const std::vector<std::uint8_t>& metadataBytes, c
     return result;
 }
 
-RunResult RunOfflineModel(const std::string& caseName,
-                          const std::vector<std::uint8_t>& modelBytes,
-                          const std::vector<std::uint8_t>& inputBytes,
-                          std::vector<float>& output,
-                          double& latencyMs)
+RunResult ValidateExecutorIO(const std::string& caseName, OH_NNExecutor* executor)
 {
-    DeviceSelection device = SelectDevice();
-    if (!device.ok) {
-        return Fail(caseName, "device_selection_failed", device.errorMessage);
+    size_t inputCount = 0;
+    size_t outputCount = 0;
+    OH_NN_ReturnCode code = OH_NNExecutor_GetInputCount(executor, &inputCount);
+    if (code != OH_NN_SUCCESS || inputCount != 1) {
+        return Fail(caseName, "input_size_mismatch", "Expected exactly one model input");
+    }
+    code = OH_NNExecutor_GetOutputCount(executor, &outputCount);
+    if (code != OH_NN_SUCCESS || outputCount != 1) {
+        return Fail(caseName, "output_size_mismatch", "Expected exactly one model output");
     }
 
-    OH_NNCompilation* compilation = nullptr;
-    OH_NNExecutor* executor = nullptr;
+    RunResult result;
+    result.ok = true;
+    result.caseName = caseName;
+    return result;
+}
+
+RunResult RunLoadedModel(const std::string& caseName,
+                         const std::vector<std::uint8_t>& inputBytes,
+                         std::vector<float>& output,
+                         double& latencyMs)
+{
+    RunResult ioCheck = ValidateExecutorIO(caseName, gExecutor);
+    if (!ioCheck.ok) {
+        return ioCheck;
+    }
+
     NN_TensorDesc* inputDesc = nullptr;
     NN_TensorDesc* outputDesc = nullptr;
     NN_Tensor* inputTensor = nullptr;
     NN_Tensor* outputTensor = nullptr;
 
-    // Keep all HarmonyOS NN calls in this file so SDK compatibility fixes stay isolated.
     const auto start = std::chrono::steady_clock::now();
-    compilation = OH_NNCompilation_ConstructWithOfflineModelBuffer(modelBytes.data(), modelBytes.size());
-    if (compilation == nullptr) {
-        return Fail(caseName, "om_compilation_failed", "OH_NNCompilation_ConstructWithOfflineModelBuffer failed");
-    }
-
-    OH_NN_ReturnCode code = OH_NNCompilation_SetDevice(compilation, device.id);
-    if (code != OH_NN_SUCCESS) {
-        DestroyCompilation(&compilation);
-        return Fail(caseName, "device_selection_failed", "OH_NNCompilation_SetDevice failed: " + device.label);
-    }
-
-    code = OH_NNCompilation_Build(compilation);
-    if (code != OH_NN_SUCCESS) {
-        DestroyCompilation(&compilation);
-        return Fail(caseName, "om_compilation_failed", "OH_NNCompilation_Build failed");
-    }
-
-    executor = OH_NNExecutor_Construct(compilation);
-    if (executor == nullptr) {
-        DestroyCompilation(&compilation);
-        return Fail(caseName, "executor_create_failed", "OH_NNExecutor_Construct failed");
-    }
-
-    size_t inputCount = 0;
-    size_t outputCount = 0;
-    code = OH_NNExecutor_GetInputCount(executor, &inputCount);
-    if (code != OH_NN_SUCCESS || inputCount != 1) {
-        DestroyExecutor(&executor);
-        DestroyCompilation(&compilation);
-        return Fail(caseName, "input_size_mismatch", "Expected exactly one model input");
-    }
-    code = OH_NNExecutor_GetOutputCount(executor, &outputCount);
-    if (code != OH_NN_SUCCESS || outputCount != 1) {
-        DestroyExecutor(&executor);
-        DestroyCompilation(&compilation);
-        return Fail(caseName, "output_size_mismatch", "Expected exactly one model output");
-    }
-
-    inputDesc = OH_NNExecutor_CreateInputTensorDesc(executor, 0);
-    outputDesc = OH_NNExecutor_CreateOutputTensorDesc(executor, 0);
+    inputDesc = OH_NNExecutor_CreateInputTensorDesc(gExecutor, 0);
+    outputDesc = OH_NNExecutor_CreateOutputTensorDesc(gExecutor, 0);
     if (inputDesc == nullptr || outputDesc == nullptr) {
         DestroyTensorDesc(&outputDesc);
         DestroyTensorDesc(&inputDesc);
-        DestroyExecutor(&executor);
-        DestroyCompilation(&compilation);
         return Fail(caseName, "executor_create_failed", "Failed to create input or output tensor descriptors");
     }
 
-    inputTensor = OH_NNTensor_CreateWithSize(device.id, inputDesc, kInputByteCount);
-    outputTensor = OH_NNTensor_CreateWithSize(device.id, outputDesc, kOutputByteCount);
+    inputTensor = OH_NNTensor_CreateWithSize(gDeviceId, inputDesc, kInputByteCount);
+    outputTensor = OH_NNTensor_CreateWithSize(gDeviceId, outputDesc, kOutputByteCount);
     DestroyTensorDesc(&outputDesc);
     DestroyTensorDesc(&inputDesc);
     if (inputTensor == nullptr || outputTensor == nullptr) {
         DestroyTensor(&outputTensor);
         DestroyTensor(&inputTensor);
-        DestroyExecutor(&executor);
-        DestroyCompilation(&compilation);
         return Fail(caseName, "executor_create_failed", "Failed to create input or output tensors");
     }
 
@@ -288,25 +303,21 @@ RunResult RunOfflineModel(const std::string& caseName,
     if (inputBuffer == nullptr || outputBuffer == nullptr) {
         DestroyTensor(&outputTensor);
         DestroyTensor(&inputTensor);
-        DestroyExecutor(&executor);
-        DestroyCompilation(&compilation);
         return Fail(caseName, "executor_create_failed", "Failed to get tensor data buffers");
     }
 
     std::memcpy(inputBuffer, inputBytes.data(), kInputByteCount);
     NN_Tensor* inputTensors[] = {inputTensor};
     NN_Tensor* outputTensors[] = {outputTensor};
-    code = OH_NNExecutor_RunSync(executor, inputTensors, 1, outputTensors, 1);
+    const OH_NN_ReturnCode code = OH_NNExecutor_RunSync(gExecutor, inputTensors, 1, outputTensors, 1);
 
     if (code == OH_NN_SUCCESS) {
         std::memcpy(output.data(), outputBuffer, kOutputByteCount);
     }
-    OutputShapeCheck outputShape = code == OH_NN_SUCCESS ? CheckOutputShape(executor) : OutputShapeCheck{};
+    OutputShapeCheck outputShape = code == OH_NN_SUCCESS ? CheckOutputShape(gExecutor) : OutputShapeCheck{};
 
     DestroyTensor(&outputTensor);
     DestroyTensor(&inputTensor);
-    DestroyExecutor(&executor);
-    DestroyCompilation(&compilation);
 
     const auto end = std::chrono::steady_clock::now();
     latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
@@ -322,7 +333,7 @@ RunResult RunOfflineModel(const std::string& caseName,
     RunResult result;
     result.ok = true;
     result.caseName = caseName;
-    result.deviceType = device.label;
+    result.deviceType = gDeviceLabel;
     result.latencyMs = latencyMs;
     result.outputElementCount = output.size();
     result.outputShapeOk = true;
@@ -341,19 +352,125 @@ std::vector<std::string> ListTestCaseNames()
     return names;
 }
 
-RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& caseName)
+ModelStatusResult LoadModel(NativeResourceManager* resourceManager)
 {
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    const auto start = std::chrono::steady_clock::now();
+
+    if (gExecutor != nullptr) {
+        ModelStatusResult result;
+        result.ok = true;
+        result.loaded = true;
+        result.deviceType = gDeviceLabel;
+        return result;
+    }
+
+    LogStage("load_model_read_om_start");
+    auto modelBytes = ReadRawfile(resourceManager, kModelFile);
+    if (!modelBytes.ok) {
+        return ModelFail(modelBytes.errorStage, modelBytes.errorMessage, start);
+    }
+
+    LogStage("load_model_select_hiai_f");
+    DeviceSelection device = SelectHiaiFDevice();
+    if (!device.ok) {
+        return ModelFail("device_selection_failed", device.errorMessage, start);
+    }
+
+    OH_NNCompilation* compilation = nullptr;
+    OH_NNExecutor* executor = nullptr;
+
+    LogStage("load_model_construct_compilation");
+    compilation = OH_NNCompilation_ConstructWithOfflineModelBuffer(modelBytes.bytes.data(), modelBytes.bytes.size());
+    if (compilation == nullptr) {
+        return ModelFail("om_compilation_failed", "OH_NNCompilation_ConstructWithOfflineModelBuffer failed", start);
+    }
+
+    OH_NN_ReturnCode code = OH_NNCompilation_SetDevice(compilation, device.id);
+    if (code != OH_NN_SUCCESS) {
+        DestroyCompilation(&compilation);
+        return ModelFail("device_selection_failed", "OH_NNCompilation_SetDevice failed: " + device.label, start);
+    }
+
+    LogStage("load_model_build_start");
+    code = OH_NNCompilation_Build(compilation);
+    if (code != OH_NN_SUCCESS) {
+        DestroyCompilation(&compilation);
+        return ModelFail("om_compilation_failed", "OH_NNCompilation_Build failed", start);
+    }
+
+    LogStage("load_model_create_executor");
+    executor = OH_NNExecutor_Construct(compilation);
+    if (executor == nullptr) {
+        DestroyCompilation(&compilation);
+        return ModelFail("executor_create_failed", "OH_NNExecutor_Construct failed", start);
+    }
+
+    RunResult ioCheck = ValidateExecutorIO("model", executor);
+    if (!ioCheck.ok) {
+        DestroyExecutor(&executor);
+        DestroyCompilation(&compilation);
+        return ModelFail(ioCheck.errorStage, ioCheck.errorMessage, start);
+    }
+
+    DestroyCompilation(&compilation);
+    gExecutor = executor;
+    gDeviceId = device.id;
+    gDeviceLabel = device.label;
+
+    const auto end = std::chrono::steady_clock::now();
+    ModelStatusResult result;
+    result.ok = true;
+    result.loaded = true;
+    result.deviceType = gDeviceLabel;
+    result.latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
+    LogStage("load_model_done");
+    return result;
+}
+
+ModelStatusResult LoadModel(napi_env env, napi_value resourceManager)
+{
+    NativeResourceManager* nativeResourceManager = OH_ResourceManager_InitNativeResourceManager(env, resourceManager);
+    ModelStatusResult result = LoadModel(nativeResourceManager);
+    if (nativeResourceManager != nullptr) {
+        OH_ResourceManager_ReleaseNativeResourceManager(nativeResourceManager);
+    }
+    return result;
+}
+
+ModelStatusResult UnloadModel()
+{
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    DestroyExecutor(&gExecutor);
+    gDeviceId = 0;
+    gDeviceLabel.clear();
+
+    ModelStatusResult result;
+    result.ok = true;
+    result.loaded = false;
+    LogStage("unload_model_done");
+    return result;
+}
+
+bool IsModelLoaded()
+{
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    return gExecutor != nullptr;
+}
+
+RunResult RunOnce(NativeResourceManager* resourceManager, const std::string& caseName)
+{
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    if (gExecutor == nullptr) {
+        return Fail(caseName, "model_not_loaded", "Load the OM model before running validation");
+    }
+
     const TestCase* testCase = FindCase(caseName);
     if (testCase == nullptr) {
         return Fail(caseName, "missing_artifact", "Unknown validation test case");
     }
 
-    auto modelBytes = ReadRawfile(env, resourceManager, kModelFile);
-    if (!modelBytes.ok) {
-        return Fail(caseName, modelBytes.errorStage, modelBytes.errorMessage);
-    }
-
-    auto inputBytes = ReadRawfile(env, resourceManager, testCase->inputFile);
+    auto inputBytes = ReadRawfile(resourceManager, testCase->inputFile);
     if (!inputBytes.ok) {
         return Fail(caseName, inputBytes.errorStage, inputBytes.errorMessage);
     }
@@ -361,7 +478,7 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
         return Fail(caseName, "input_size_mismatch", "Input rawfile byte count does not match [1,3,448,448] fp32");
     }
 
-    auto expectedBytes = ReadRawfile(env, resourceManager, testCase->expectedOutputFile);
+    auto expectedBytes = ReadRawfile(resourceManager, testCase->expectedOutputFile);
     if (!expectedBytes.ok) {
         return Fail(caseName, expectedBytes.errorStage, expectedBytes.errorMessage);
     }
@@ -369,19 +486,18 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
         return Fail(caseName, "output_size_mismatch",
                     "Expected output rawfile byte count does not match [1,256,1024] fp32");
     }
-    auto metadataBytes = ReadRawfile(env, resourceManager, testCase->metadataFile);
+    auto metadataBytes = ReadRawfile(resourceManager, testCase->metadataFile);
     if (!metadataBytes.ok) {
         return Fail(caseName, metadataBytes.errorStage, metadataBytes.errorMessage);
     }
     MetricsResult metadataResult = ValidateMetadata(metadataBytes.bytes, *testCase);
     if (!metadataResult.ok) {
-        RunResult result = Fail(caseName, metadataResult.errorStage, metadataResult.errorMessage);
-        return result;
+        return Fail(caseName, metadataResult.errorStage, metadataResult.errorMessage);
     }
 
     std::vector<float> output(kOutputElementCount, 0.0f);
     double latencyMs = 0.0;
-    RunResult runResult = RunOfflineModel(caseName, modelBytes.bytes, inputBytes.bytes, output, latencyMs);
+    RunResult runResult = RunLoadedModel(caseName, inputBytes.bytes, output, latencyMs);
     if (!runResult.ok) {
         return runResult;
     }
@@ -406,7 +522,17 @@ RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& c
     return result;
 }
 
-StabilityResult RunStability(napi_env env, napi_value resourceManager, const std::string& caseName, int repeatCount)
+RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& caseName)
+{
+    NativeResourceManager* nativeResourceManager = OH_ResourceManager_InitNativeResourceManager(env, resourceManager);
+    RunResult result = RunOnce(nativeResourceManager, caseName);
+    if (nativeResourceManager != nullptr) {
+        OH_ResourceManager_ReleaseNativeResourceManager(nativeResourceManager);
+    }
+    return result;
+}
+
+StabilityResult RunStability(NativeResourceManager* resourceManager, const std::string& caseName, int repeatCount)
 {
     if (repeatCount <= 0) {
         repeatCount = 20;
@@ -419,7 +545,7 @@ StabilityResult RunStability(napi_env env, napi_value resourceManager, const std
 
     double latencySum = 0.0;
     for (int index = 0; index < repeatCount; ++index) {
-        RunResult run = RunOnce(env, resourceManager, caseName);
+        RunResult run = RunOnce(resourceManager, caseName);
         result.lastRun = run;
         if (!run.ok) {
             result.errorStage = run.errorStage;
@@ -439,6 +565,16 @@ StabilityResult RunStability(napi_env env, napi_value resourceManager, const std
     }
 
     result.ok = result.successCount == repeatCount;
+    return result;
+}
+
+StabilityResult RunStability(napi_env env, napi_value resourceManager, const std::string& caseName, int repeatCount)
+{
+    NativeResourceManager* nativeResourceManager = OH_ResourceManager_InitNativeResourceManager(env, resourceManager);
+    StabilityResult result = RunStability(nativeResourceManager, caseName, repeatCount);
+    if (nativeResourceManager != nullptr) {
+        OH_ResourceManager_ReleaseNativeResourceManager(nativeResourceManager);
+    }
     return result;
 }
 

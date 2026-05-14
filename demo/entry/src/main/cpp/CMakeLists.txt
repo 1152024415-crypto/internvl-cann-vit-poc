@@ -22,6 +22,7 @@ add_library(entry SHARED
 set(ENTRY_LINK_LIBS
     libace_napi.z.so
     librawfile.z.so
+    libhilog_ndk.z.so
     libneural_network_core.so
 )
 

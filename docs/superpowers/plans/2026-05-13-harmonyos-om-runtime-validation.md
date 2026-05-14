@@ -1,5 +1,13 @@
 # HarmonyOS OM Runtime Validation Implementation Plan
 
+Status note, 2026-05-14: this plan is historical. The checked-in implementation
+has since been adjusted to match the CANN Kit deployment lifecycle more closely:
+`loadModel(resourceManager)` loads/builds the OM once, selects `HIAI_F` by device
+name/id, creates a cached `OH_NNExecutor`, and `runOnce` / `runStability` reuse
+that executor through Promise-based NAPI calls. Use
+`docs/yellow-zone-validation-runbook.md` and `docs/current-status.md` as the
+current source of truth.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a reproducible yellow-zone validation path where HarmonyOS Native C++ loads the InternVL3.5 ViT + projector OM, runs raw fp32 tensor input, and compares the output against a Python-generated reference.

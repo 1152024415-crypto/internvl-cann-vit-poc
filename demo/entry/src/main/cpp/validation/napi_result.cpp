@@ -67,6 +67,19 @@ napi_value ToNapiValue(napi_env env, const StabilityResult& result)
     return object;
 }
 
+napi_value ToNapiValue(napi_env env, const ModelStatusResult& result)
+{
+    napi_value object;
+    napi_create_object(env, &object);
+    SetBool(env, object, "ok", result.ok);
+    SetBool(env, object, "loaded", result.loaded);
+    SetString(env, object, "deviceType", result.deviceType);
+    SetString(env, object, "errorStage", result.errorStage);
+    SetString(env, object, "errorMessage", result.errorMessage);
+    SetNumber(env, object, "latencyMs", result.latencyMs);
+    return object;
+}
+
 napi_value StringArrayToNapiValue(napi_env env, const std::vector<std::string>& values)
 {
     napi_value array;

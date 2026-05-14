@@ -1,6 +1,7 @@
 #pragma once
 
 #include "napi/native_api.h"
+#include "rawfile/raw_file_manager.h"
 
 #include <cstddef>
 #include <string>
@@ -37,8 +38,23 @@ struct StabilityResult {
     RunResult lastRun;
 };
 
+struct ModelStatusResult {
+    bool ok = false;
+    bool loaded = false;
+    std::string deviceType;
+    std::string errorStage;
+    std::string errorMessage;
+    double latencyMs = 0.0;
+};
+
 std::vector<std::string> ListTestCaseNames();
+ModelStatusResult LoadModel(NativeResourceManager* resourceManager);
+ModelStatusResult LoadModel(napi_env env, napi_value resourceManager);
+ModelStatusResult UnloadModel();
+bool IsModelLoaded();
+RunResult RunOnce(NativeResourceManager* resourceManager, const std::string& caseName);
 RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& caseName);
+StabilityResult RunStability(NativeResourceManager* resourceManager, const std::string& caseName, int repeatCount);
 StabilityResult RunStability(napi_env env, napi_value resourceManager, const std::string& caseName, int repeatCount);
 
 } // namespace internvl

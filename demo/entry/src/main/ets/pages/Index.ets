@@ -1,5 +1,5 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import testNapi, { RunResult, StabilityResult } from 'libentry.so';
+import testNapi, { ModelStatusResult, RunResult, StabilityResult } from 'libentry.so';
 
 const DOMAIN = 0x0000;
 const TAG = 'InternVLValidation';
@@ -9,7 +9,10 @@ const TAG = 'InternVLValidation';
 struct Index {
   @State selectedCase: string = '';
   @State cases: string[] = [];
+  @State busy: boolean = false;
+  @State modelLoaded: boolean = false;
   @State status: string = 'Ready';
+  @State modelText: string = '';
   @State runText: string = '';
   @State stabilityText: string = '';
 
@@ -26,6 +29,17 @@ struct Index {
       this.runText = message;
       hilog.error(DOMAIN, TAG, 'listTestCases error: %{public}s', message);
     }
+  }
+
+  formatModel(result: ModelStatusResult): string {
+    return [
+      `ok: ${result.ok}`,
+      `loaded: ${result.loaded}`,
+      `device: ${result.deviceType}`,
+      `latency: ${result.latencyMs} ms`,
+      `error_stage: ${result.errorStage}`,
+      `error_message: ${result.errorMessage}`
+    ].join('\n');
   }
 
   formatRun(result: RunResult): string {
@@ -63,15 +77,70 @@ struct Index {
     ].join('\n');
   }
 
-  runOnce(): void {
+  async loadModel(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+
+    this.busy = true;
+    this.status = 'Loading OM model...';
+    try {
+      const result = await testNapi.loadModel(getContext(this).resourceManager);
+      this.modelLoaded = result.loaded;
+      this.modelText = this.formatModel(result);
+      this.status = result.ok ? 'Model loaded' : 'Model load failed';
+      hilog.info(DOMAIN, TAG, 'loadModel ok=%{public}s loaded=%{public}s', `${result.ok}`, `${result.loaded}`);
+    } catch (error) {
+      const message = `${error}`;
+      this.modelLoaded = false;
+      this.status = 'Model load error';
+      this.modelText = message;
+      hilog.error(DOMAIN, TAG, 'loadModel error: %{public}s', message);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async unloadModel(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+
+    this.busy = true;
+    this.status = 'Unloading model...';
+    try {
+      const result = await testNapi.unloadModel();
+      this.modelLoaded = result.loaded;
+      this.modelText = this.formatModel(result);
+      this.status = result.ok ? 'Model unloaded' : 'Model unload failed';
+      hilog.info(DOMAIN, TAG, 'unloadModel ok=%{public}s loaded=%{public}s', `${result.ok}`, `${result.loaded}`);
+    } catch (error) {
+      const message = `${error}`;
+      this.status = 'Model unload error';
+      this.modelText = message;
+      hilog.error(DOMAIN, TAG, 'unloadModel error: %{public}s', message);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async runOnce(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
     if (this.selectedCase.length === 0) {
       this.status = 'No native test case available';
       return;
     }
+    if (!this.modelLoaded) {
+      this.status = 'Load model first';
+      return;
+    }
 
+    this.busy = true;
     this.status = `Running single ${this.selectedCase} case...`;
     try {
-      const result = testNapi.runOnce(getContext(this).resourceManager, this.selectedCase);
+      const result = await testNapi.runOnce(getContext(this).resourceManager, this.selectedCase);
       this.runText = this.formatRun(result);
       this.status = result.ok ? 'Single run passed' : 'Single run failed';
       hilog.info(DOMAIN, TAG, 'runOnce %{public}s ok=%{public}s', this.selectedCase, `${result.ok}`);
@@ -80,18 +149,28 @@ struct Index {
       this.status = 'Single run error';
       this.runText = message;
       hilog.error(DOMAIN, TAG, 'runOnce error: %{public}s', message);
+    } finally {
+      this.busy = false;
     }
   }
 
-  runStability(): void {
+  async runStability(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
     if (this.selectedCase.length === 0) {
       this.status = 'No native test case available';
       return;
     }
+    if (!this.modelLoaded) {
+      this.status = 'Load model first';
+      return;
+    }
 
+    this.busy = true;
     this.status = `Running 20x ${this.selectedCase} stability...`;
     try {
-      const result = testNapi.runStability(getContext(this).resourceManager, this.selectedCase, 20);
+      const result = await testNapi.runStability(getContext(this).resourceManager, this.selectedCase, 20);
       this.stabilityText = this.formatStability(result);
       this.status = result.ok ? 'Stability run passed' : 'Stability run failed';
       hilog.info(DOMAIN, TAG, 'runStability %{public}s ok=%{public}s', this.selectedCase, `${result.ok}`);
@@ -100,6 +179,8 @@ struct Index {
       this.status = 'Stability run error';
       this.stabilityText = message;
       hilog.error(DOMAIN, TAG, 'runStability error: %{public}s', message);
+    } finally {
+      this.busy = false;
     }
   }
 
@@ -113,6 +194,7 @@ struct Index {
       Row({ space: 12 }) {
         ForEach(this.cases, (caseName: string) => {
           Button(caseName)
+            .enabled(!this.busy)
             .onClick(() => {
               this.selectedCase = caseName;
               this.status = 'Ready';
@@ -126,12 +208,29 @@ struct Index {
         .width('100%')
 
       Row({ space: 12 }) {
+        Button('Load Model')
+          .enabled(!this.busy)
+          .onClick(() => {
+            this.loadModel();
+          })
+
+        Button('Unload')
+          .enabled(!this.busy && this.modelLoaded)
+          .onClick(() => {
+            this.unloadModel();
+          })
+      }
+      .width('100%')
+
+      Row({ space: 12 }) {
         Button('Run Once')
+          .enabled(!this.busy && this.modelLoaded)
           .onClick(() => {
             this.runOnce();
           })
 
         Button('Run 20 Stability')
+          .enabled(!this.busy && this.modelLoaded)
           .onClick(() => {
             this.runStability();
           })
@@ -141,6 +240,15 @@ struct Index {
       Text(this.status)
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
+        .width('100%')
+
+      Text('Model')
+        .fontSize(18)
+        .fontWeight(FontWeight.Medium)
+        .width('100%')
+
+      TextArea({ text: this.modelText })
+        .height(120)
         .width('100%')
 
       Text('Single Run')

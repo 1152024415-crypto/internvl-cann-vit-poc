@@ -48,13 +48,17 @@ directory, not the repository root.
 SDK and CANN Kit/runtime support. Do not record simulator or emulator results
 for this validation.
 
-6. Run the Dog single-run validation and record the fields in the Device Results
+6. Tap `Load Model` and wait for `Model loaded`. This performs the CANN Kit
+runtime setup once: load the OM, select `HIAI_F`, build the compilation, and
+create a reusable executor.
+
+7. Run the Dog single-run validation and record the fields in the Device Results
 template.
 
-7. Run the Cat single-run validation and record the fields in the Device Results
+8. Run the Cat single-run validation and record the fields in the Device Results
 template.
 
-8. Run the 20-run Dog/Cat stability validation and record the success counts and
+9. Run the 20-run Dog/Cat stability validation and record the success counts and
 average latencies in the Device Results template.
 
 During blue-zone review, the NN runtime adapter was checked against the local
@@ -132,8 +136,9 @@ output: visual_tokens [1, 256, 1024]     fp32   1048576 bytes
 The first run passes when:
 
 ```text
-OM loads successfully
-compilation and executor creation succeed
+Load Model succeeds
+device is HIAI_F
+compilation and executor creation succeed once
 RunSync returns success
 output shape is [1, 256, 1024]
 all output values are finite
@@ -141,8 +146,8 @@ cosine >= 0.999
 mean_abs_diff <= 0.01
 ```
 
-The 20-run stability test passes when all 20 runs return success and meet the
-same numeric thresholds.
+The 20-run stability test passes when all 20 runs reuse the loaded executor,
+return success, and meet the same numeric thresholds.
 
 ## Device Results
 

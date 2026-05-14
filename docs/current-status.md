@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 ## Mainline
 
@@ -64,19 +64,42 @@ HarmonyOS demo workspace:
 demo/
 ```
 
-It is currently a blank DevEco Native C++ template with a sample NAPI `add`
-function. CANN/NN runtime inference code has not been added yet.
+It now contains a Native C++ validation path for the ViT + projector OM.
+The app exposes:
+
+```text
+listTestCases()
+loadModel(resourceManager)
+unloadModel()
+runOnce(resourceManager, caseName)
+runStability(resourceManager, caseName, repeatCount)
+```
+
+The native side follows the CANN Kit endpoint deployment lifecycle:
+
+```text
+read .om rawfile
+select HIAI_F
+OH_NNCompilation_ConstructWithOfflineModelBuffer
+OH_NNCompilation_SetDevice
+OH_NNCompilation_Build
+OH_NNExecutor_Construct
+destroy compilation
+reuse executor for RunSync
+```
+
+The NAPI entry points return Promises so model loading/building and `RunSync`
+do not execute on the ArkUI event thread.
 
 ## Not Completed
 
 Device-side work still pending:
 
 ```text
-load .om from resources/rawfile
-select HIAI_F / NPU device
-build OH_NN executor
-run OH_NNExecutor_RunSync
-compare output against baseline
+compile/install on a yellow-zone physical HarmonyOS device
+confirm HIAI_F / NPU placement
+confirm OH_NNExecutor_RunSync succeeds
+compare output against baseline on device
 measure latency, memory, cold start, 20-run stability
 ```
 
@@ -91,15 +114,5 @@ HWC -> BCHW
 float32 tensor
 ```
 
-Recommended next blue-zone task:
-
-```text
-export raw fp32 validation tensors:
-dog_pixel_values_fp32.bin
-dog_visual_tokens_fp32.bin
-cat_pixel_values_fp32.bin
-cat_visual_tokens_fp32.bin
-```
-
-These `.bin` files allow the yellow-zone C++ demo to validate OM runtime first,
-before implementing image preprocessing.
+The raw fp32 validation tensors are tracked in git, so yellow-zone validation
+only needs the checked-out code plus the Release `.om` file.

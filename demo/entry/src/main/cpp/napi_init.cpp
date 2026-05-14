@@ -1,13 +1,43 @@
 #include "napi/native_api.h"
+#include "rawfile/raw_file_manager.h"
 
 #include "validation/napi_result.h"
 #include "validation/nn_runtime_validator.h"
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
 namespace {
+
+enum class AsyncOperation {
+    LoadModel,
+    UnloadModel,
+    RunOnce,
+    RunStability,
+};
+
+struct AsyncContext {
+    napi_deferred deferred = nullptr;
+    napi_async_work work = nullptr;
+    NativeResourceManager* resourceManager = nullptr;
+    AsyncOperation operation = AsyncOperation::RunOnce;
+    std::string caseName;
+    int repeatCount = 20;
+    internvl::ModelStatusResult modelResult;
+    internvl::RunResult runResult;
+    internvl::StabilityResult stabilityResult;
+};
+
+internvl::ModelStatusResult ModelArgError(const std::string& message)
+{
+    internvl::ModelStatusResult result;
+    result.loaded = internvl::IsModelLoaded();
+    result.errorStage = "napi_arg_error";
+    result.errorMessage = message;
+    return result;
+}
 
 internvl::RunResult RunArgError(const std::string& message)
 {
@@ -62,10 +92,157 @@ bool IsObjectArg(napi_env env, napi_value value)
     return napi_typeof(env, value, &valueType) == napi_ok && valueType == napi_object;
 }
 
+napi_value ErrorResultToNapiValue(napi_env env, AsyncOperation operation, const std::string& message)
+{
+    switch (operation) {
+        case AsyncOperation::LoadModel:
+        case AsyncOperation::UnloadModel:
+            return internvl::ToNapiValue(env, ModelArgError(message));
+        case AsyncOperation::RunStability:
+            return internvl::ToNapiValue(env, StabilityArgError(message));
+        case AsyncOperation::RunOnce:
+        default:
+            return internvl::ToNapiValue(env, RunArgError(message));
+    }
+}
+
+napi_value CreateResolvedPromise(napi_env env, napi_value value)
+{
+    napi_value promise = nullptr;
+    napi_deferred deferred = nullptr;
+    napi_create_promise(env, &deferred, &promise);
+    napi_resolve_deferred(env, deferred, value);
+    return promise;
+}
+
+void ReleaseAsyncContext(AsyncContext* context)
+{
+    if (context == nullptr) {
+        return;
+    }
+    if (context->resourceManager != nullptr) {
+        OH_ResourceManager_ReleaseNativeResourceManager(context->resourceManager);
+        context->resourceManager = nullptr;
+    }
+    delete context;
+}
+
+void ExecuteAsync(napi_env env, void* data)
+{
+    (void)env;
+    auto* context = static_cast<AsyncContext*>(data);
+    switch (context->operation) {
+        case AsyncOperation::LoadModel:
+            context->modelResult = internvl::LoadModel(context->resourceManager);
+            break;
+        case AsyncOperation::UnloadModel:
+            context->modelResult = internvl::UnloadModel();
+            break;
+        case AsyncOperation::RunStability:
+            context->stabilityResult = internvl::RunStability(
+                context->resourceManager, context->caseName, context->repeatCount);
+            break;
+        case AsyncOperation::RunOnce:
+        default:
+            context->runResult = internvl::RunOnce(context->resourceManager, context->caseName);
+            break;
+    }
+}
+
+void CompleteAsync(napi_env env, napi_status status, void* data)
+{
+    auto* context = static_cast<AsyncContext*>(data);
+    napi_value value = nullptr;
+    if (status != napi_ok) {
+        value = ErrorResultToNapiValue(env, context->operation, "Native async work failed");
+    } else {
+        switch (context->operation) {
+            case AsyncOperation::LoadModel:
+            case AsyncOperation::UnloadModel:
+                value = internvl::ToNapiValue(env, context->modelResult);
+                break;
+            case AsyncOperation::RunStability:
+                value = internvl::ToNapiValue(env, context->stabilityResult);
+                break;
+            case AsyncOperation::RunOnce:
+            default:
+                value = internvl::ToNapiValue(env, context->runResult);
+                break;
+        }
+    }
+
+    napi_resolve_deferred(env, context->deferred, value);
+    napi_delete_async_work(env, context->work);
+    ReleaseAsyncContext(context);
+}
+
+napi_value QueueAsync(napi_env env, AsyncContext* context, const char* workName)
+{
+    napi_value promise = nullptr;
+    if (napi_create_promise(env, &context->deferred, &promise) != napi_ok) {
+        ReleaseAsyncContext(context);
+        napi_value undefinedValue = nullptr;
+        napi_get_undefined(env, &undefinedValue);
+        return undefinedValue;
+    }
+
+    napi_value resourceName = nullptr;
+    napi_create_string_utf8(env, workName, std::strlen(workName), &resourceName);
+    napi_status status = napi_create_async_work(
+        env, nullptr, resourceName, ExecuteAsync, CompleteAsync, context, &context->work);
+    if (status != napi_ok) {
+        napi_value value = ErrorResultToNapiValue(env, context->operation, "napi_create_async_work failed");
+        napi_resolve_deferred(env, context->deferred, value);
+        ReleaseAsyncContext(context);
+        return promise;
+    }
+
+    status = napi_queue_async_work(env, context->work);
+    if (status != napi_ok) {
+        napi_value value = ErrorResultToNapiValue(env, context->operation, "napi_queue_async_work failed");
+        napi_resolve_deferred(env, context->deferred, value);
+        napi_delete_async_work(env, context->work);
+        ReleaseAsyncContext(context);
+        return promise;
+    }
+
+    return promise;
+}
+
 napi_value ListTestCases(napi_env env, napi_callback_info info)
 {
     (void)info;
     return internvl::StringArrayToNapiValue(env, internvl::ListTestCaseNames());
+}
+
+napi_value LoadModel(napi_env env, napi_callback_info info)
+{
+    std::size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc < 1 || !IsObjectArg(env, args[0])) {
+        return CreateResolvedPromise(env, internvl::ToNapiValue(env, ModelArgError("loadModel requires resourceManager")));
+    }
+
+    NativeResourceManager* resourceManager = OH_ResourceManager_InitNativeResourceManager(env, args[0]);
+    if (resourceManager == nullptr) {
+        return CreateResolvedPromise(
+            env, internvl::ToNapiValue(env, ModelArgError("Failed to initialize NativeResourceManager")));
+    }
+
+    auto* context = new AsyncContext();
+    context->operation = AsyncOperation::LoadModel;
+    context->resourceManager = resourceManager;
+    return QueueAsync(env, context, "InternVLLoadModel");
+}
+
+napi_value UnloadModel(napi_env env, napi_callback_info info)
+{
+    (void)info;
+    auto* context = new AsyncContext();
+    context->operation = AsyncOperation::UnloadModel;
+    return QueueAsync(env, context, "InternVLUnloadModel");
 }
 
 napi_value RunOnce(napi_env env, napi_callback_info info)
@@ -75,15 +252,27 @@ napi_value RunOnce(napi_env env, napi_callback_info info)
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
     if (argc < 2 || !IsObjectArg(env, args[0])) {
-        return internvl::ToNapiValue(env, RunArgError("runOnce requires resourceManager and caseName"));
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, RunArgError("runOnce requires resourceManager and caseName")));
     }
 
     std::string caseName;
     if (!ReadStringArg(env, args[1], caseName)) {
-        return internvl::ToNapiValue(env, RunArgError("runOnce caseName must be a string"));
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, RunArgError("runOnce caseName must be a string")));
     }
 
-    return internvl::ToNapiValue(env, internvl::RunOnce(env, args[0], caseName));
+    NativeResourceManager* resourceManager = OH_ResourceManager_InitNativeResourceManager(env, args[0]);
+    if (resourceManager == nullptr) {
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, RunArgError("Failed to initialize NativeResourceManager")));
+    }
+
+    auto* context = new AsyncContext();
+    context->operation = AsyncOperation::RunOnce;
+    context->resourceManager = resourceManager;
+    context->caseName = caseName;
+    return QueueAsync(env, context, "InternVLRunOnce");
 }
 
 napi_value RunStability(napi_env env, napi_callback_info info)
@@ -93,21 +282,34 @@ napi_value RunStability(napi_env env, napi_callback_info info)
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
     if (argc < 3 || !IsObjectArg(env, args[0])) {
-        return internvl::ToNapiValue(env,
-                                     StabilityArgError("runStability requires resourceManager, caseName, and repeatCount"));
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, StabilityArgError("runStability requires resourceManager, caseName, and repeatCount")));
     }
 
     std::string caseName;
     if (!ReadStringArg(env, args[1], caseName)) {
-        return internvl::ToNapiValue(env, StabilityArgError("runStability caseName must be a string"));
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, StabilityArgError("runStability caseName must be a string")));
     }
 
     std::int32_t repeatCount = 20;
     if (!ReadInt32Arg(env, args[2], repeatCount)) {
-        return internvl::ToNapiValue(env, StabilityArgError("runStability repeatCount must be a number"));
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, StabilityArgError("runStability repeatCount must be a number")));
     }
 
-    return internvl::ToNapiValue(env, internvl::RunStability(env, args[0], caseName, repeatCount));
+    NativeResourceManager* resourceManager = OH_ResourceManager_InitNativeResourceManager(env, args[0]);
+    if (resourceManager == nullptr) {
+        return CreateResolvedPromise(env, internvl::ToNapiValue(
+            env, StabilityArgError("Failed to initialize NativeResourceManager")));
+    }
+
+    auto* context = new AsyncContext();
+    context->operation = AsyncOperation::RunStability;
+    context->resourceManager = resourceManager;
+    context->caseName = caseName;
+    context->repeatCount = repeatCount;
+    return QueueAsync(env, context, "InternVLRunStability");
 }
 
 } // namespace
@@ -117,6 +319,8 @@ static napi_value Init(napi_env env, napi_value exports)
 {
     napi_property_descriptor desc[] = {
         {"listTestCases", nullptr, ListTestCases, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"loadModel", nullptr, LoadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"unloadModel", nullptr, UnloadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runOnce", nullptr, RunOnce, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runStability", nullptr, RunStability, nullptr, nullptr, nullptr, napi_default, nullptr},
     };

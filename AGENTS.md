@@ -115,9 +115,16 @@ Current demo state: Native C++ validation demo with NAPI methods:
 
 ```text
 listTestCases()
+loadModel(resourceManager)
+unloadModel()
 runOnce(resourceManager, caseName)
 runStability(resourceManager, caseName, repeatCount)
 ```
+
+`loadModel` follows the CANN Kit endpoint deployment flow: read `.om` from
+rawfile, select `HIAI_F`, call `OH_NNCompilation_ConstructWithOfflineModelBuffer`,
+`OH_NNCompilation_Build`, then create and cache one `OH_NNExecutor`. `runOnce`
+and `runStability` reuse that executor instead of recompiling the OM.
 
 The native target is `arm64-v8a` only. This PoC validates physical-phone NN
 runtime / NPU behavior, not x86_64 emulator behavior.

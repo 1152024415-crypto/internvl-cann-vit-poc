@@ -14,6 +14,19 @@ pixel_values [1, 3, 448, 448]
 This does not validate image decoding, resize, normalization, AIPP, or full VLM
 text generation.
 
+Official CANN Kit references used for this demo:
+
+```text
+Deployment full flow:
+https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/cannkit-whole-deployment-process
+
+Model inference API flow:
+https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/cannkit-model-inference
+
+App integration model flow:
+https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/cannkit-integration-model
+```
+
 ## Current Asset Status
 
 As of 2026-05-13, the GitHub Release contains:
@@ -197,6 +210,23 @@ dog/cat metadata .json
 If packaging fails because the `.om` is too large, record the exact error. That
 means the next task is packaging strategy, not model accuracy.
 
+Native logs use tag:
+
+```text
+InternVLNative
+```
+
+Useful load stages:
+
+```text
+load_model_read_om_start
+load_model_select_hiai_f
+load_model_construct_compilation
+load_model_build_start
+load_model_create_executor
+load_model_done
+```
+
 ## Step 5: Run Single-Case Validation
 
 Open the app. The title should be:
@@ -211,6 +241,17 @@ The case buttons come from native `listTestCases()`. Expected cases:
 dog
 cat
 ```
+
+First load and compile the OM:
+
+```text
+Tap Load Model
+Wait until status shows Model loaded
+```
+
+This is intentionally separate from `Run Once`. It mirrors the CANN Kit
+deployment flow: load OM, select `HIAI_F`, build the compilation, create the
+executor, then reuse that executor for inference.
 
 For dog:
 
@@ -239,14 +280,15 @@ mean_abs_diff: <= 0.01
 ```
 
 The `device` line should be recorded exactly. A good result should indicate an
-accelerator/NPU-like device, for example:
+accelerator/NPU device named `HIAI_F`, for example:
 
 ```text
-type=ACCELERATOR
+name=HIAI_F type=ACCELERATOR
 ```
 
-If the device line reports CPU or does not show accelerator placement, do not
-count the run as NPU validation. Record it as a fallback/runtime-placement issue.
+If `Load Model` reports `device_selection_failed` and the available device list
+does not contain `HIAI_F`, do not count the run as NPU validation. Record it as
+a runtime-placement/device-support issue.
 
 ## Step 6: Run 20-Run Stability
 
@@ -275,9 +317,10 @@ min latency recorded
 max latency recorded
 ```
 
-This first implementation recompiles/reruns the full validation path each time.
-So the 20-run number is a conservative runtime stability check, not a pure warm
-executor benchmark.
+The current implementation compiles the OM once in `Load Model` and reuses the
+same `OH_NNExecutor` for every `Run Once` and `Run 20 Stability` call. The
+20-run number is therefore a warm executor stability check, not a repeated model
+compile benchmark.
 
 ## Step 7: Record Results
 
@@ -369,8 +412,8 @@ runtime support this OM. Also confirm the OM file is not corrupted.
 `device_selection_failed`
 
 ```text
-No usable NN runtime device was found, or SetDevice failed. Record available
-device information from the UI/logs.
+The native validator could not find `HIAI_F`, or SetDevice failed after finding
+it. Record available device information from the UI/logs.
 ```
 
 `executor_create_failed`
