@@ -1,5 +1,5 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import testNapi, { ModelStatusResult, RunResult, StabilityResult } from 'libentry.so';
+import testNapi, { ModelStatusResult, OfficialSmokeResult, RunResult, StabilityResult } from 'libentry.so';
 
 const DOMAIN = 0x0000;
 const TAG = 'InternVLValidation';
@@ -37,6 +37,21 @@ struct Index {
       `loaded: ${result.loaded}`,
       `device: ${result.deviceType}`,
       `latency: ${result.latencyMs} ms`,
+      `error_stage: ${result.errorStage}`,
+      `error_message: ${result.errorMessage}`
+    ].join('\n');
+  }
+
+  formatOfficialSmoke(result: OfficialSmokeResult): string {
+    return [
+      `ok: ${result.ok}`,
+      `device: ${result.deviceType}`,
+      `latency: ${result.latencyMs} ms`,
+      `model_bytes: ${result.modelByteCount}`,
+      `input_count: ${result.inputCount}`,
+      `output_count: ${result.outputCount}`,
+      `input_bytes: ${result.inputByteCount}`,
+      `output_bytes: ${result.outputByteCount}`,
       `error_stage: ${result.errorStage}`,
       `error_message: ${result.errorMessage}`
     ].join('\n');
@@ -119,6 +134,28 @@ struct Index {
       this.status = 'Model unload error';
       this.modelText = message;
       hilog.error(DOMAIN, TAG, 'unloadModel error: %{public}s', message);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async runOfficialSmoke(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+
+    this.busy = true;
+    this.status = 'Running official OM smoke test...';
+    try {
+      const result = await testNapi.runOfficialSmoke(getContext(this).resourceManager);
+      this.modelText = this.formatOfficialSmoke(result);
+      this.status = result.ok ? 'Official smoke passed' : 'Official smoke failed';
+      hilog.info(DOMAIN, TAG, 'runOfficialSmoke ok=%{public}s', `${result.ok}`);
+    } catch (error) {
+      const message = `${error}`;
+      this.status = 'Official smoke error';
+      this.modelText = message;
+      hilog.error(DOMAIN, TAG, 'runOfficialSmoke error: %{public}s', message);
     } finally {
       this.busy = false;
     }
@@ -218,6 +255,12 @@ struct Index {
           .enabled(!this.busy && this.modelLoaded)
           .onClick(() => {
             this.unloadModel();
+          })
+
+        Button('Official Smoke')
+          .enabled(!this.busy)
+          .onClick(() => {
+            this.runOfficialSmoke();
           })
       }
       .width('100%')

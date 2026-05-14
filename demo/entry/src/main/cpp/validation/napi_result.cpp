@@ -80,6 +80,23 @@ napi_value ToNapiValue(napi_env env, const ModelStatusResult& result)
     return object;
 }
 
+napi_value ToNapiValue(napi_env env, const OfficialSmokeResult& result)
+{
+    napi_value object;
+    napi_create_object(env, &object);
+    SetBool(env, object, "ok", result.ok);
+    SetString(env, object, "deviceType", result.deviceType);
+    SetString(env, object, "errorStage", result.errorStage);
+    SetString(env, object, "errorMessage", result.errorMessage);
+    SetNumber(env, object, "latencyMs", result.latencyMs);
+    SetNumber(env, object, "modelByteCount", static_cast<double>(result.modelByteCount));
+    SetNumber(env, object, "inputCount", static_cast<double>(result.inputCount));
+    SetNumber(env, object, "outputCount", static_cast<double>(result.outputCount));
+    SetNumber(env, object, "inputByteCount", static_cast<double>(result.inputByteCount));
+    SetNumber(env, object, "outputByteCount", static_cast<double>(result.outputByteCount));
+    return object;
+}
+
 napi_value StringArrayToNapiValue(napi_env env, const std::vector<std::string>& values)
 {
     napi_value array;

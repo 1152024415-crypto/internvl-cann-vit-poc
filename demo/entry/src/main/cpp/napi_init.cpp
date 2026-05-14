@@ -14,6 +14,7 @@ namespace {
 enum class AsyncOperation {
     LoadModel,
     UnloadModel,
+    RunOfficialSmoke,
     RunOnce,
     RunStability,
 };
@@ -26,6 +27,7 @@ struct AsyncContext {
     std::string caseName;
     int repeatCount = 20;
     internvl::ModelStatusResult modelResult;
+    internvl::OfficialSmokeResult officialSmokeResult;
     internvl::RunResult runResult;
     internvl::StabilityResult stabilityResult;
 };
@@ -50,6 +52,14 @@ internvl::RunResult RunArgError(const std::string& message)
 internvl::StabilityResult StabilityArgError(const std::string& message)
 {
     internvl::StabilityResult result;
+    result.errorStage = "napi_arg_error";
+    result.errorMessage = message;
+    return result;
+}
+
+internvl::OfficialSmokeResult OfficialSmokeArgError(const std::string& message)
+{
+    internvl::OfficialSmokeResult result;
     result.errorStage = "napi_arg_error";
     result.errorMessage = message;
     return result;
@@ -98,6 +108,8 @@ napi_value ErrorResultToNapiValue(napi_env env, AsyncOperation operation, const 
         case AsyncOperation::LoadModel:
         case AsyncOperation::UnloadModel:
             return internvl::ToNapiValue(env, ModelArgError(message));
+        case AsyncOperation::RunOfficialSmoke:
+            return internvl::ToNapiValue(env, OfficialSmokeArgError(message));
         case AsyncOperation::RunStability:
             return internvl::ToNapiValue(env, StabilityArgError(message));
         case AsyncOperation::RunOnce:
@@ -138,6 +150,9 @@ void ExecuteAsync(napi_env env, void* data)
         case AsyncOperation::UnloadModel:
             context->modelResult = internvl::UnloadModel();
             break;
+        case AsyncOperation::RunOfficialSmoke:
+            context->officialSmokeResult = internvl::RunOfficialSmoke(context->resourceManager);
+            break;
         case AsyncOperation::RunStability:
             context->stabilityResult = internvl::RunStability(
                 context->resourceManager, context->caseName, context->repeatCount);
@@ -160,6 +175,9 @@ void CompleteAsync(napi_env env, napi_status status, void* data)
             case AsyncOperation::LoadModel:
             case AsyncOperation::UnloadModel:
                 value = internvl::ToNapiValue(env, context->modelResult);
+                break;
+            case AsyncOperation::RunOfficialSmoke:
+                value = internvl::ToNapiValue(env, context->officialSmokeResult);
                 break;
             case AsyncOperation::RunStability:
                 value = internvl::ToNapiValue(env, context->stabilityResult);
@@ -245,6 +263,29 @@ napi_value UnloadModel(napi_env env, napi_callback_info info)
     return QueueAsync(env, context, "InternVLUnloadModel");
 }
 
+napi_value RunOfficialSmoke(napi_env env, napi_callback_info info)
+{
+    std::size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc < 1 || !IsObjectArg(env, args[0])) {
+        return CreateResolvedPromise(
+            env, internvl::ToNapiValue(env, OfficialSmokeArgError("runOfficialSmoke requires resourceManager")));
+    }
+
+    NativeResourceManager* resourceManager = OH_ResourceManager_InitNativeResourceManager(env, args[0]);
+    if (resourceManager == nullptr) {
+        return CreateResolvedPromise(
+            env, internvl::ToNapiValue(env, OfficialSmokeArgError("Failed to initialize NativeResourceManager")));
+    }
+
+    auto* context = new AsyncContext();
+    context->operation = AsyncOperation::RunOfficialSmoke;
+    context->resourceManager = resourceManager;
+    return QueueAsync(env, context, "InternVLOfficialSmoke");
+}
+
 napi_value RunOnce(napi_env env, napi_callback_info info)
 {
     std::size_t argc = 2;
@@ -321,6 +362,7 @@ static napi_value Init(napi_env env, napi_value exports)
         {"listTestCases", nullptr, ListTestCases, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"loadModel", nullptr, LoadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"unloadModel", nullptr, UnloadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"runOfficialSmoke", nullptr, RunOfficialSmoke, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runOnce", nullptr, RunOnce, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runStability", nullptr, RunStability, nullptr, nullptr, nullptr, napi_default, nullptr},
     };

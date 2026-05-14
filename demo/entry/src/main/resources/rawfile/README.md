@@ -9,9 +9,16 @@ Before building the HarmonyOS demo, this directory must contain:
 - `cat_pixel_values_fp32.bin`
 - `cat_visual_tokens_fp32.bin`
 - `cat.metadata.json`
+- `official_squeezenet_hiai.om`
 
-The `.om` file is a large release artifact. Do not commit it to git; fetch it
-from the release payload before building.
+The InternVL `.om` file is a large release artifact. Do not commit it to git;
+fetch it from the release payload before building.
+
+The `official_squeezenet_hiai.om` file comes from Huawei's public CANN Kit C++
+sample. It is intentionally tracked in git because it is only about 2.5 MB and
+provides a known-good CANN smoke test for the app, SDK, and device environment.
+Expected size is 2,496,459 bytes and SHA256 is
+`533B84458D7694174A220D3AA8B984B1F0021FB7D3997A1CC2732AA3B51C7AD3`.
 
 The four `.bin` files are tracked in git because they are small enough and make
 yellow-zone validation reproducible after `git pull`.

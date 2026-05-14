@@ -106,6 +106,7 @@ The app exposes:
 listTestCases()
 loadModel(resourceManager)
 unloadModel()
+runOfficialSmoke(resourceManager)
 runOnce(resourceManager, caseName)
 runStability(resourceManager, caseName, repeatCount)
 ```
@@ -153,4 +154,6 @@ float32 tensor
 ```
 
 The raw fp32 validation tensors are tracked in git, so yellow-zone validation
-only needs the checked-out code plus the Release `.om` file.
+only needs the checked-out code plus the Release `.om` file. The official
+SqueezeNet CANN sample OM is also tracked in git as
+`official_squeezenet_hiai.om` for a small known-good runtime smoke test.

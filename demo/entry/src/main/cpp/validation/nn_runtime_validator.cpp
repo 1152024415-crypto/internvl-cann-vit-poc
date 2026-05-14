@@ -31,6 +31,7 @@ namespace {
 constexpr unsigned int kLogDomain = 0x0000;
 constexpr const char* kLogTag = "InternVLNative";
 constexpr const char* kRequiredNpuName = "HIAI_F";
+constexpr const char* kOfficialSampleModelFile = "official_squeezenet_hiai.om";
 
 std::mutex gRuntimeMutex;
 OH_NNExecutor* gExecutor = nullptr;
@@ -210,10 +211,28 @@ ModelStatusResult ModelFail(const std::string& stage,
     return result;
 }
 
+OfficialSmokeResult OfficialSmokeFail(const std::string& stage,
+                                      const std::string& message,
+                                      const std::chrono::steady_clock::time_point& start,
+                                      const std::string& deviceLabel,
+                                      std::size_t modelByteCount)
+{
+    const auto end = std::chrono::steady_clock::now();
+    OfficialSmokeResult result;
+    result.deviceType = deviceLabel;
+    result.errorStage = stage;
+    result.errorMessage = message;
+    result.modelByteCount = modelByteCount;
+    result.latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
+    LogStageError(stage.c_str(), message);
+    return result;
+}
+
 void DestroyExecutor(OH_NNExecutor** executor)
 {
     if (executor != nullptr && *executor != nullptr) {
         OH_NNExecutor_Destroy(executor);
+        *executor = nullptr;
     }
 }
 
@@ -221,6 +240,7 @@ void DestroyCompilation(OH_NNCompilation** compilation)
 {
     if (compilation != nullptr && *compilation != nullptr) {
         OH_NNCompilation_Destroy(compilation);
+        *compilation = nullptr;
     }
 }
 
@@ -228,6 +248,7 @@ void DestroyTensor(NN_Tensor** tensor)
 {
     if (tensor != nullptr && *tensor != nullptr) {
         OH_NNTensor_Destroy(tensor);
+        *tensor = nullptr;
     }
 }
 
@@ -235,6 +256,7 @@ void DestroyTensorDesc(NN_TensorDesc** tensorDesc)
 {
     if (tensorDesc != nullptr && *tensorDesc != nullptr) {
         OH_NNTensorDesc_Destroy(tensorDesc);
+        *tensorDesc = nullptr;
     }
 }
 
@@ -533,6 +555,161 @@ bool IsModelLoaded()
 {
     std::lock_guard<std::mutex> lock(gRuntimeMutex);
     return gExecutor != nullptr;
+}
+
+OfficialSmokeResult RunOfficialSmoke(NativeResourceManager* resourceManager)
+{
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    const auto start = std::chrono::steady_clock::now();
+    std::string deviceLabel;
+    std::size_t modelByteCount = 0;
+
+    OH_NNCompilation* compilation = nullptr;
+    OH_NNExecutor* executor = nullptr;
+    NN_TensorDesc* inputDesc = nullptr;
+    NN_TensorDesc* outputDesc = nullptr;
+    NN_Tensor* inputTensor = nullptr;
+    NN_Tensor* outputTensor = nullptr;
+
+    auto cleanup = [&]() {
+        DestroyTensor(&outputTensor);
+        DestroyTensor(&inputTensor);
+        DestroyTensorDesc(&outputDesc);
+        DestroyTensorDesc(&inputDesc);
+        DestroyExecutor(&executor);
+        DestroyCompilation(&compilation);
+    };
+    auto fail = [&](const std::string& stage, const std::string& message) {
+        cleanup();
+        return OfficialSmokeFail(stage, message, start, deviceLabel, modelByteCount);
+    };
+
+    LogStage("official_smoke_read_om_start");
+    auto modelBytes = ReadRawfile(resourceManager, kOfficialSampleModelFile);
+    if (!modelBytes.ok) {
+        return fail(modelBytes.errorStage, modelBytes.errorMessage);
+    }
+    modelByteCount = modelBytes.bytes.size();
+    OH_LOG_Print(LOG_APP, LOG_INFO, kLogDomain, kLogTag,
+                 "stage=official_smoke_read_om_done om_bytes=%{public}zu", modelByteCount);
+
+    LogStage("official_smoke_select_hiai_f");
+    DeviceSelection device = SelectHiaiFDevice();
+    if (!device.ok) {
+        return fail("device_selection_failed", device.errorMessage);
+    }
+    deviceLabel = device.label;
+    OH_LOG_Print(LOG_APP, LOG_INFO, kLogDomain, kLogTag,
+                 "stage=official_smoke_select_hiai_f selected_device=%{public}s", deviceLabel.c_str());
+
+    LogStage("official_smoke_construct_compilation");
+    LogHiaiCompatibility(modelBytes.bytes);
+    compilation = OH_NNCompilation_ConstructWithOfflineModelBuffer(modelBytes.bytes.data(), modelBytes.bytes.size());
+    if (compilation == nullptr) {
+        return fail("official_smoke_compilation_failed",
+                    "OH_NNCompilation_ConstructWithOfflineModelBuffer failed");
+    }
+
+    OH_NN_ReturnCode code = OH_NNCompilation_SetDevice(compilation, device.id);
+    if (code != OH_NN_SUCCESS) {
+        return fail("device_selection_failed",
+                    "OH_NNCompilation_SetDevice failed code=" + std::to_string(ReturnCodeToInt(code)) +
+                        " device=" + deviceLabel);
+    }
+
+    LogStage("official_smoke_set_hiai_build_options");
+    code = SetOfficialHiaiBuildOptions(compilation);
+    if (code != OH_NN_SUCCESS) {
+        return fail("hiai_build_options_failed",
+                    "Official HiAI build option setup failed code=" + std::to_string(ReturnCodeToInt(code)));
+    }
+
+    LogStage("official_smoke_build_start");
+    code = OH_NNCompilation_Build(compilation);
+    if (code != OH_NN_SUCCESS) {
+        return fail("official_smoke_compilation_failed",
+                    "OH_NNCompilation_Build failed code=" + std::to_string(ReturnCodeToInt(code)));
+    }
+
+    LogStage("official_smoke_create_executor");
+    executor = OH_NNExecutor_Construct(compilation);
+    if (executor == nullptr) {
+        return fail("official_smoke_executor_failed", "OH_NNExecutor_Construct failed");
+    }
+
+    size_t inputCount = 0;
+    size_t outputCount = 0;
+    code = OH_NNExecutor_GetInputCount(executor, &inputCount);
+    if (code != OH_NN_SUCCESS || inputCount != 1) {
+        return fail("official_smoke_io_mismatch", "Expected exactly one official sample input");
+    }
+    code = OH_NNExecutor_GetOutputCount(executor, &outputCount);
+    if (code != OH_NN_SUCCESS || outputCount != 1) {
+        return fail("official_smoke_io_mismatch", "Expected exactly one official sample output");
+    }
+
+    inputDesc = OH_NNExecutor_CreateInputTensorDesc(executor, 0);
+    outputDesc = OH_NNExecutor_CreateOutputTensorDesc(executor, 0);
+    if (inputDesc == nullptr || outputDesc == nullptr) {
+        return fail("official_smoke_tensor_failed", "Failed to create official sample tensor descriptors");
+    }
+
+    inputTensor = OH_NNTensor_Create(device.id, inputDesc);
+    outputTensor = OH_NNTensor_Create(device.id, outputDesc);
+    DestroyTensorDesc(&outputDesc);
+    DestroyTensorDesc(&inputDesc);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return fail("official_smoke_tensor_failed", "Failed to create official sample tensors");
+    }
+
+    void* inputBuffer = OH_NNTensor_GetDataBuffer(inputTensor);
+    std::size_t inputByteCount = 0;
+    code = OH_NNTensor_GetSize(inputTensor, &inputByteCount);
+    if (code != OH_NN_SUCCESS || inputBuffer == nullptr || inputByteCount == 0) {
+        return fail("official_smoke_tensor_failed", "Failed to get official sample input buffer");
+    }
+    std::memset(inputBuffer, 0, inputByteCount);
+
+    NN_Tensor* inputTensors[] = {inputTensor};
+    NN_Tensor* outputTensors[] = {outputTensor};
+    LogStage("official_smoke_run_sync_start");
+    code = OH_NNExecutor_RunSync(executor, inputTensors, 1, outputTensors, 1);
+    if (code != OH_NN_SUCCESS) {
+        return fail("official_smoke_run_sync_failed",
+                    "OH_NNExecutor_RunSync failed code=" + std::to_string(ReturnCodeToInt(code)));
+    }
+
+    void* outputBuffer = OH_NNTensor_GetDataBuffer(outputTensor);
+    std::size_t outputByteCount = 0;
+    code = OH_NNTensor_GetSize(outputTensor, &outputByteCount);
+    if (code != OH_NN_SUCCESS || outputBuffer == nullptr || outputByteCount == 0) {
+        return fail("official_smoke_tensor_failed", "Failed to get official sample output buffer");
+    }
+
+    cleanup();
+
+    const auto end = std::chrono::steady_clock::now();
+    OfficialSmokeResult result;
+    result.ok = true;
+    result.deviceType = deviceLabel;
+    result.latencyMs = std::chrono::duration<double, std::milli>(end - start).count();
+    result.modelByteCount = modelByteCount;
+    result.inputCount = inputCount;
+    result.outputCount = outputCount;
+    result.inputByteCount = inputByteCount;
+    result.outputByteCount = outputByteCount;
+    LogStage("official_smoke_done");
+    return result;
+}
+
+OfficialSmokeResult RunOfficialSmoke(napi_env env, napi_value resourceManager)
+{
+    NativeResourceManager* nativeResourceManager = OH_ResourceManager_InitNativeResourceManager(env, resourceManager);
+    OfficialSmokeResult result = RunOfficialSmoke(nativeResourceManager);
+    if (nativeResourceManager != nullptr) {
+        OH_ResourceManager_ReleaseNativeResourceManager(nativeResourceManager);
+    }
+    return result;
 }
 
 RunResult RunOnce(NativeResourceManager* resourceManager, const std::string& caseName)

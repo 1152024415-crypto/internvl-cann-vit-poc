@@ -280,6 +280,35 @@ dog
 cat
 ```
 
+Before loading the large InternVL model, run the official sample OM smoke test:
+
+```text
+Tap Official Smoke
+```
+
+This loads `official_squeezenet_hiai.om`, which is copied from Huawei's public
+CANN Kit C++ sample and tracked in git because it is only about 2.5 MB. The
+smoke test uses the same native CANN build setup as the InternVL path, then
+creates tensors, fills the input buffer with zeroes, and calls
+`OH_NNExecutor_RunSync`. It does not check image classification accuracy.
+
+Expected passing smoke result:
+
+```text
+ok: true
+device: name=HIAI_F type=ACCELERATOR
+model_bytes: 2496459
+input_count: 1
+output_count: 1
+input_bytes: > 0
+output_bytes: > 0
+```
+
+If `Official Smoke` fails, investigate the yellow-zone SDK/device/app runtime
+before debugging the InternVL OM. If `Official Smoke` passes but `Load Model`
+fails, the current failure is specific to the InternVL OM or its conversion
+settings.
+
 First load and compile the OM:
 
 ```text

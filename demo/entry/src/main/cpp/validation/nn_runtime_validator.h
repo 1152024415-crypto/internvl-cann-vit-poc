@@ -47,11 +47,26 @@ struct ModelStatusResult {
     double latencyMs = 0.0;
 };
 
+struct OfficialSmokeResult {
+    bool ok = false;
+    std::string deviceType;
+    std::string errorStage;
+    std::string errorMessage;
+    double latencyMs = 0.0;
+    std::size_t modelByteCount = 0;
+    std::size_t inputCount = 0;
+    std::size_t outputCount = 0;
+    std::size_t inputByteCount = 0;
+    std::size_t outputByteCount = 0;
+};
+
 std::vector<std::string> ListTestCaseNames();
 ModelStatusResult LoadModel(NativeResourceManager* resourceManager);
 ModelStatusResult LoadModel(napi_env env, napi_value resourceManager);
 ModelStatusResult UnloadModel();
 bool IsModelLoaded();
+OfficialSmokeResult RunOfficialSmoke(NativeResourceManager* resourceManager);
+OfficialSmokeResult RunOfficialSmoke(napi_env env, napi_value resourceManager);
 RunResult RunOnce(NativeResourceManager* resourceManager, const std::string& caseName);
 RunResult RunOnce(napi_env env, napi_value resourceManager, const std::string& caseName);
 StabilityResult RunStability(NativeResourceManager* resourceManager, const std::string& caseName, int repeatCount);

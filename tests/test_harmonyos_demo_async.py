@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import unittest
 
@@ -39,8 +40,13 @@ class HarmonyOSDemoCannDeploymentTests(unittest.TestCase):
         typings = read_text("demo/entry/src/main/cpp/types/libentry/Index.d.ts")
 
         self.assertIn("export interface ModelStatusResult", typings)
+        self.assertIn("export interface OfficialSmokeResult", typings)
         self.assertIn("loadModel: (resourceManager: object) => Promise<ModelStatusResult>", typings)
         self.assertIn("unloadModel: () => Promise<ModelStatusResult>", typings)
+        self.assertIn(
+            "runOfficialSmoke: (resourceManager: object) => Promise<OfficialSmokeResult>",
+            typings,
+        )
         self.assertIn("runOnce: (resourceManager: object, caseName: string) => Promise<RunResult>", typings)
         self.assertIn(
             "runStability: (resourceManager: object, caseName: string, repeatCount: number) "
@@ -68,3 +74,28 @@ class HarmonyOSDemoCannDeploymentTests(unittest.TestCase):
         self.assertIn("selected_device=%{public}s", source)
         self.assertIn("ReturnCodeToInt", source)
         self.assertIn("OH_NNCompilation_Build failed code=", source)
+
+    def test_official_squeezenet_smoke_path_is_packaged_and_exported(self) -> None:
+        official_om = ROOT / "demo/entry/src/main/resources/rawfile/official_squeezenet_hiai.om"
+        self.assertTrue(official_om.exists())
+        self.assertGreater(official_om.stat().st_size, 2_000_000)
+        self.assertLess(official_om.stat().st_size, 3_000_000)
+        self.assertEqual(
+            hashlib.sha256(official_om.read_bytes()).hexdigest().upper(),
+            "533B84458D7694174A220D3AA8B984B1F0021FB7D3997A1CC2732AA3B51C7AD3",
+        )
+
+        validator = read_text("demo/entry/src/main/cpp/validation/nn_runtime_validator.cpp")
+        self.assertIn('kOfficialSampleModelFile = "official_squeezenet_hiai.om"', validator)
+        self.assertIn("OfficialSmokeResult RunOfficialSmoke", validator)
+        self.assertIn("official_smoke_build_start", validator)
+        self.assertIn("OH_NNExecutor_RunSync", validator)
+
+        native = read_text("demo/entry/src/main/cpp/napi_init.cpp")
+        self.assertIn("AsyncOperation::RunOfficialSmoke", native)
+        self.assertIn('{"runOfficialSmoke"', native)
+
+        ui = read_text("demo/entry/src/main/ets/pages/Index.ets")
+        self.assertIn("async runOfficialSmoke(): Promise<void>", ui)
+        self.assertIn("await testNapi.runOfficialSmoke", ui)
+        self.assertIn("Official Smoke", ui)
