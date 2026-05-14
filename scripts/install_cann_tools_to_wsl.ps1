@@ -22,6 +22,21 @@ function Convert-ToWslPath {
     return "/mnt/$drive/$rest"
 }
 
+function Invoke-WslChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    & wsl @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
 Start-Transcript -Path $LogPath -Force
 
 try {
@@ -90,7 +105,7 @@ echo "OMG_PATH=$OMG_PATH"
     $wslScriptPath = Convert-ToWslPath -WindowsPath $scriptPath
     Write-Host "WSL install script: $wslScriptPath"
 
-    wsl -d $Distro -- bash $wslScriptPath
+    Invoke-WslChecked -Description "WSL CANN tools import" -Arguments @("-d", $Distro, "--", "bash", $wslScriptPath)
 
     Write-Host "=== CANN tools import finished: $(Get-Date -Format o) ==="
 }

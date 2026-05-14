@@ -19,6 +19,21 @@ function Convert-ToWslPath {
     return "/mnt/$drive/$rest"
 }
 
+function Invoke-WslChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    & wsl @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
 Start-Transcript -Path $LogPath -Force
 
 try {
@@ -52,7 +67,7 @@ ls -lh "__WIN_OM_WSL_DIR__"
     $wslScriptPath = Convert-ToWslPath -WindowsPath $scriptPath
     Write-Host "WSL copy script: $wslScriptPath"
 
-    wsl -d $Distro -- bash $wslScriptPath
+    Invoke-WslChecked -Description "WSL OM copy" -Arguments @("-d", $Distro, "--", "bash", $wslScriptPath)
     Write-Host "=== OM copy finished: $(Get-Date -Format o) ==="
 }
 finally {

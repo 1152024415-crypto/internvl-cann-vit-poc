@@ -20,6 +20,21 @@ function Convert-ToWslPath {
     return "/mnt/$drive/$rest"
 }
 
+function Invoke-WslChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    & wsl @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
 Start-Transcript -Path $LogPath -Force
 
 try {
@@ -88,7 +103,7 @@ ls -lh "${WIN_PROJECT}/artifacts/om/${OUTPUT_NAME}.om"
     $wslScriptPath = Convert-ToWslPath -WindowsPath $scriptPath
     Write-Host "WSL conversion script: $wslScriptPath"
 
-    wsl -d $Distro -- bash $wslScriptPath
+    Invoke-WslChecked -Description "WSL ONNX to OM conversion" -Arguments @("-d", $Distro, "--", "bash", $wslScriptPath)
     Write-Host "=== ONNX to OM finished: $(Get-Date -Format o) ==="
 }
 finally {

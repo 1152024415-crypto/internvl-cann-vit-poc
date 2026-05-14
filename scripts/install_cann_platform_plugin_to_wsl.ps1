@@ -40,6 +40,21 @@ function Expand-PackageIfNeeded {
     return $resolved
 }
 
+function Invoke-WslChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    & wsl @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
 Start-Transcript -Path $LogPath -Force
 
 try {
@@ -130,7 +145,7 @@ find "${PLATFORM_ROOT}" -type f \( -name 'libai_npucore_itf.so' -o -name 'libcus
     $wslScriptPath = Convert-ToWslPath -WindowsPath $scriptPath
     Write-Host "WSL platform plugin install script: $wslScriptPath"
 
-    wsl -d $Distro -- bash $wslScriptPath
+    Invoke-WslChecked -Description "WSL platform plugin install" -Arguments @("-d", $Distro, "--", "bash", $wslScriptPath)
     Write-Host "=== CANN platform plugin import finished: $(Get-Date -Format o) ==="
 }
 finally {

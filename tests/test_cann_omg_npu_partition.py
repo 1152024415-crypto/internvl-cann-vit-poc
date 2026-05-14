@@ -27,6 +27,25 @@ class CannOmgNpuPartitionTests(unittest.TestCase):
         self.assertIn("kirin", script)
         self.assertIn("PluginPackagePath", script)
         self.assertIn("CANN platform plugin import", script)
+        self.assertIn("Invoke-WslChecked", script)
+        self.assertIn("$LASTEXITCODE", script)
+
+    def test_wsl_helper_scripts_fail_when_wsl_fails(self) -> None:
+        scripts = [
+            "scripts/check_wsl_omg.ps1",
+            "scripts/convert_wsl_onnx_to_om.ps1",
+            "scripts/copy_wsl_om_to_windows.ps1",
+            "scripts/install_cann_platform_plugin_to_wsl.ps1",
+            "scripts/install_cann_tools_to_wsl.ps1",
+            "scripts/prepare_wsl_stage3.ps1",
+        ]
+
+        for relative_path in scripts:
+            with self.subTest(script=relative_path):
+                script = read_text(relative_path)
+                self.assertIn("Invoke-WslChecked", script)
+                self.assertIn("$LASTEXITCODE", script)
+                self.assertIn("throw", script)
 
     def test_docs_record_current_cpu_only_om_root_cause(self) -> None:
         docs = read_text("docs/stage-4-vit-projector-chain.md")
