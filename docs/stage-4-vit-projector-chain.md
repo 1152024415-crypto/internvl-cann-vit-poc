@@ -2,10 +2,11 @@
 
 ## Current Status
 
-Status: ViT + projector chain is verified in PyTorch baseline and ONNX. The
-Kirin 9030 replacement OM has been generated from a CANN-specific ONNX, passed
-Linux static validation, and been uploaded to GitHub Release. Device runtime
-validation is still pending.
+Status: ViT + projector chain is verified in PyTorch baseline and ONNX. A
+blue-zone replacement OM was generated from a CANN-specific ONNX and passed
+Linux static validation, but it is no longer the authoritative runtime artifact
+after the blue-zone/yellow-zone DDK mismatch was found. The next trusted OM
+must be regenerated in yellow zone and then validated on device.
 
 This is the chain we care about before handing image features to the LLM:
 
@@ -180,7 +181,7 @@ cat cosine vs PyTorch = 1.0000001192092896
 
 ## OM Artifact
 
-The ViT + projector OM artifact is:
+The historical ViT + projector OM artifact is:
 
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
@@ -251,7 +252,7 @@ The old root cause was:
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 ```
 
-The replacement OM was generated after:
+The blue-zone replacement OM was generated after:
 
 ```text
 Kirin 9030 platform plugin installed
@@ -259,10 +260,14 @@ OMG called with --platform kirin9030
 CANN-specific ONNX removed static class-token Equal/Where/Expand
 ```
 
-The latest OMG log does not print a partition summary. The host-side evidence is
-therefore weaker than a phone run, but it is materially different from the old
-CPU-only conversion: it shows `AI_NPUCL`, does not show `CPUCL`, and does not
-show `partition type NPU:0`.
+The latest blue-zone OMG log does not print a partition summary. The host-side
+evidence is therefore weaker than a phone run, but it is materially different
+from the old CPU-only conversion: it shows `AI_NPUCL`, does not show `CPUCL`,
+and does not show `partition type NPU:0`.
+
+After the DDK mismatch finding, this host-side result is documentation only. The
+yellow-zone side should regenerate the OM with the yellow-zone DDK following
+`docs/yellow-zone-onnx-to-om-ddk-runbook.md`.
 
 So the current verified chain is:
 
@@ -270,9 +275,10 @@ So the current verified chain is:
 PyTorch projector baseline: verified
 ONNX projector inference: verified against PyTorch
 CANN-specific ONNX inference: verified against PyTorch
-ONNX projector -> OM conversion: host-side Kirin 9030 NPU-targeted conversion generated
+ONNX projector -> OM conversion: blue-zone host-side conversion generated, yellow-zone regeneration pending
 OM runtime inference: not verified yet
 ```
 
-The next step is to copy the Release `.om` into the yellow-zone HarmonyOS app
-rawfile directory and rerun device validation.
+The next step is to regenerate the OM in yellow zone, copy that accepted `.om`
+into the yellow-zone HarmonyOS app rawfile directory, and rerun device
+validation.

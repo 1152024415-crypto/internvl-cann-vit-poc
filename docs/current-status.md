@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-14
+Last updated: 2026-05-15
 
 ## Mainline
 
@@ -16,13 +16,18 @@ This is not full VLM text generation. It produces visual embeddings for the LLM:
 visual_tokens [1, 256, 1024]
 ```
 
-Target phone platform for NPU OM generation:
+Target phone reported by the user:
 
 ```text
 Kirin 9030
-platform plugin package = kirin9030-plugin-6.0.1.0
-expected SHA256 = 3B32EFFC5AF9804628CB9287E88CC28ED381877ADB15DD85BF8D66E3BE805251
 ```
+
+Important: do not require the Kirin 9030 platform package on the grounds of
+custom-operator development. This project writes no custom operators. Treat
+`--platform kirin9030` as a target-specific OMG conversion variable: if it is
+used, the matching platform package must be installed; if the official
+yellow-zone DDK workflow works without `--platform`, keep that run and judge it
+by logs plus phone-side validation.
 
 ## Completed
 
@@ -56,7 +61,7 @@ cat cosine vs PyTorch = 1.0000001192092896
 SHA256 = 215A6248B2C5A259A531472210E31282791F50945917CEF6419A238C19E893C2
 ```
 
-Release OM artifact:
+Historical blue-zone OM artifact:
 
 ```text
 artifacts/om/internvl3_5_vit_projector_fp32_opset18_staticpos.om
@@ -71,7 +76,7 @@ Linux static validation = pass
 precheck report = success, pass 1096, fail 0
 OM JSON input = pixel_values [1, 3, 448, 448]
 OM JSON output = Node_Output [1, 256, 1024]
-GitHub Release upload verified = yes
+GitHub Release upload verified = yes at the time of upload
 GitHub asset digest = sha256:8d081689805763b786be003b5627061dfb9324edf3df7df0226c8f5a9c093fa7
 ```
 
@@ -83,8 +88,11 @@ internvl3_5_vit_projector_fp32_opset18_staticpos.om
 internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
 ```
 
-Important: the uploaded Release `.om` now matches the Linux-validated Kirin
-9030 replacement OM. It is ready for yellow-zone HarmonyOS device validation.
+Important: after the blue-zone/yellow-zone DDK mismatch was found, this Release
+`.om` is no longer the authoritative final runtime artifact. Use it only as
+historical context unless it is regenerated or explicitly confirmed by the
+yellow-zone DDK run. The next trusted OM should be produced in yellow zone using
+`docs/yellow-zone-onnx-to-om-ddk-runbook.md`, then validated on device.
 
 Small tracked artifact metadata:
 
@@ -136,8 +144,9 @@ do not execute on the ArkUI event thread.
 Device-side work still pending:
 
 ```text
+regenerate OM in yellow zone with yellow-zone DDK/OMG
 compile/install on a yellow-zone physical HarmonyOS device
-confirm HIAI_F / NPU placement with the replacement OM
+confirm HIAI_F / NPU placement with the yellow-zone-regenerated OM
 confirm OH_NNExecutor_RunSync succeeds
 compare output against baseline on device
 measure latency, memory, cold start, 20-run stability
@@ -155,8 +164,8 @@ float32 tensor
 ```
 
 The raw fp32 validation tensors are tracked in git, so yellow-zone validation
-only needs the checked-out code plus the Release `.om` file. The official
-SqueezeNet CANN sample OM is also tracked in git as
+only needs the checked-out code plus the yellow-zone-regenerated `.om` file. The
+official SqueezeNet CANN sample OM is also tracked in git as
 `official_squeezenet_hiai.om` for a small known-good runtime smoke test. The
 official `cup` and `guitar` images, labels, and generated 227 x 227 BGR inputs
 are tracked as a second known-good classification check.

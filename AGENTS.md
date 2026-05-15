@@ -15,19 +15,22 @@ The current target is **ViT + projector**, not the full language model.
 
 ## Current Verified Chain
 
-Read `docs/stage-4-vit-projector-chain.md` first for the current mainline.
+Read `docs/yellow-zone-agent-handoff.md` first when working in or handing off
+to the yellow-zone environment. Read `docs/stage-4-vit-projector-chain.md` for
+the model chain details.
 
 Verified:
 
 ```text
 PyTorch projector baseline
 ONNX projector inference vs PyTorch baseline
-ONNX projector -> OM conversion with CANN Kit OMG
+blue-zone ONNX projector -> OM conversion with CANN Kit OMG, host-side only
 ```
 
 Not verified yet:
 
 ```text
+yellow-zone DDK regeneration of the final OM
 OM runtime inference on HarmonyOS device
 NPU/HIAI_F placement
 latency, memory, cold start, 20-run stability
@@ -75,11 +78,13 @@ Use these files instead of loading every document at once:
 docs/index.md                         high-level doc index
 docs/current-status.md                current state snapshot
 docs/search-guide.md                  keywords and search commands
+docs/yellow-zone-agent-handoff.md     first document for yellow-zone AI handoff
 docs/stage-1-model-split-baseline.md  model split and PyTorch baselines
 docs/stage-2-onnx-export.md           ONNX export and ONNX Runtime checks
 docs/stage-3-onnx-to-om.md            OMG conversion and OM notes
 docs/stage-4-vit-projector-chain.md   current ViT + projector chain
 docs/release-artifacts.md             GitHub Release asset workflow
+docs/yellow-zone-onnx-to-om-ddk-runbook.md yellow-zone DDK OM regeneration guide
 docs/yellow-zone-validation-runbook.md yellow-zone device validation runbook
 docs/next-steps.md                    active next steps
 ```
@@ -106,6 +111,12 @@ Do not re-enable FlashAttention/FA3 for ONNX/CANN export.
 Do not reintroduce bicubic position-embedding `Resize` into the CANN-targeted
 ONNX. The `staticpos` export bypasses it for fixed `448 x 448` input.
 
+Do not require the Kirin 9030 platform package on the grounds of custom-operator
+development. This project writes no custom operators. Treat `--platform kirin9030`
+as one target-specific OMG conversion choice: if used, the matching
+platform package must be installed; if omitted by the official yellow-zone DDK
+flow, judge the result by logs and phone-side validation.
+
 ## HarmonyOS Demo
 
 `demo/` is the HarmonyOS Native C++ workspace. Generated DevEco/Hvigor folders
@@ -117,6 +128,8 @@ Current demo state: Native C++ validation demo with NAPI methods:
 listTestCases()
 loadModel(resourceManager)
 unloadModel()
+runOfficialSmoke(resourceManager)
+runOfficialClassification(resourceManager, imageName)
 runOnce(resourceManager, caseName)
 runStability(resourceManager, caseName, repeatCount)
 ```

@@ -8,6 +8,7 @@ large instruction file.
 Start here:
 
 ```text
+yellow-zone-agent-handoff.md
 current-status.md
 stage-4-vit-projector-chain.md
 ```
@@ -61,6 +62,14 @@ release-artifacts.md
 ```
 
 GitHub Release asset workflow and large-file policy.
+
+```text
+yellow-zone-agent-handoff.md
+```
+
+One-page entrypoint for a yellow-zone AI/engineer. It gives the read order,
+current OM-regeneration requirement, platform-plugin clarification, deliverables,
+device gates, and a ready-to-use prompt.
 
 ```text
 yellow-zone-validation-runbook.md

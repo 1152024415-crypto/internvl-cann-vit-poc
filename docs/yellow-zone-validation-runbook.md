@@ -29,15 +29,19 @@ https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/cannkit-integratio
 
 ## Current Asset Status
 
-As of 2026-05-13, the GitHub Release contains:
+The app needs this runtime asset in `resources/rawfile`:
 
 ```text
-internvl3_5_vit_projector_fp32_opset18_staticpos.om
-internvl3_5_vit_projector_fp32_opset18_staticpos.onnx
-internvl3_5_vit_projector_fp32_opset18_staticpos.onnx.metadata.json
+demo/entry/src/main/resources/rawfile/internvl3_5_vit_projector_fp32_opset18_staticpos.om
 ```
 
-The original 2026-05-13 uploaded `.om` was a CPU-only OM from the OMG log:
+Use the yellow-zone-regenerated OM from
+`docs/yellow-zone-onnx-to-om-ddk-runbook.md`. Do not treat a blue-zone-generated
+Release OM as final proof after the blue-zone/yellow-zone DDK mismatch was
+found.
+
+Historical note: the original 2026-05-13 uploaded `.om` was a CPU-only OM from
+the OMG log:
 
 ```text
 partition type NPU:0, CPU:1, GPU:0, ISP:0
@@ -47,7 +51,8 @@ That old OM must not be used as proof of NPU runtime validation. Yellow-zone
 runtime already confirmed it could be read and that `HIAI_F` could be selected,
 but `OH_NNCompilation_Build` rejected it during authentication.
 
-As of 2026-05-14, the GitHub Release `.om` has been replaced and verified:
+Another 2026-05-14 blue-zone-generated replacement OM had stronger host-side
+evidence:
 
 ```text
 release asset = internvl3_5_vit_projector_fp32_opset18_staticpos.om
@@ -65,7 +70,13 @@ OM JSON input = pixel_values [1, 3, 448, 448]
 OM JSON output = Node_Output [1, 256, 1024]
 ```
 
-Download this Release OM before running the device validation steps below.
+That host-side result is useful context, but it is not final because the user
+later found that the blue-zone DDK is not the DDK that should produce the phone
+validation OM. The current required flow is:
+
+```text
+yellow-zone ONNX -> yellow-zone DDK/OMG -> yellow-zone OM -> HarmonyOS device validation
+```
 
 The yellow-zone runtime demo also uses these raw fp32 validation tensors:
 
@@ -129,7 +140,7 @@ If the repo already exists:
 git pull origin main
 ```
 
-## Step 2: Download The OM Runtime Asset
+## Step 2: Add The OM Runtime Asset
 
 Create the rawfile directory:
 
@@ -137,7 +148,7 @@ Create the rawfile directory:
 New-Item -ItemType Directory -Force demo\entry\src\main\resources\rawfile
 ```
 
-Download this file from the Release:
+Copy the yellow-zone-regenerated OM into the rawfile directory and name it:
 
 ```text
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
@@ -153,7 +164,9 @@ Do not put the ONNX file in the HarmonyOS app. The device demo loads the `.om`
 file only. The `.bin` and `.metadata.json` files should already be present from
 git.
 
-Optional PowerShell download helper:
+If the yellow-zone OM has already been uploaded to GitHub Release, this optional
+PowerShell helper can download it. Do not use this helper for an old blue-zone
+OM:
 
 ```powershell
 $repo = "1152024415-crypto/internvl-cann-vit-poc"
@@ -176,7 +189,7 @@ foreach ($name in $required) {
 }
 ```
 
-After copying, the rawfile directory should contain:
+After copying the accepted OM, the rawfile directory should contain:
 
 ```text
 internvl3_5_vit_projector_fp32_opset18_staticpos.om
@@ -541,14 +554,13 @@ official SqueezeNet CANN sample on the same phone. If the official sample also
 fails, treat it as yellow-zone SDK/device/signing environment. If the official
 sample passes, treat our ViT projector OM as the failing component.
 
-For the 2026-05-14 failure, the matching OMG log shows:
+For the old 2026-05-14 failure, the matching OMG log shows:
 
 partition type NPU:0, CPU:1, GPU:0, ISP:0
 
-That means the old OM is CPU-only. The replacement OM was regenerated with
-`--platform kirin9030` from the CANN-specific ONNX. If the replacement still
-fails here, keep the full `OH_NNCompilation_Build` log because the next problem
-is no longer the old CPU-only host conversion.
+That means the old OM is CPU-only. The current fix is not "blindly reuse the
+blue-zone replacement OM"; it is to regenerate the OM in the yellow zone with
+the correct DDK, keep the OMG logs, and then rerun this device validation.
 ```
 
 `device_selection_failed`

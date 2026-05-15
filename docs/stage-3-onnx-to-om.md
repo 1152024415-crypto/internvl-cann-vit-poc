@@ -2,9 +2,11 @@
 
 ## Current Status
 
-Status: the old ViT + projector OM was CPU-only. A replacement projector OM has
-now been generated for Kirin 9030 from a CANN-specific ONNX. Device runtime
-validation is still pending.
+Status: the old ViT + projector OM was CPU-only. A blue-zone replacement OM was
+generated from a CANN-specific ONNX and passed host-side static checks, but the
+user later found that OM generation must be done with the yellow-zone DDK. The
+next authoritative OM should be regenerated in yellow zone and then validated on
+device.
 
 WSL status from the installation logs:
 
@@ -42,13 +44,20 @@ partition type NPU:0, CPU:1, GPU:0, ISP:0
 
 That meant the generated OM was CPU-only.
 
-The replacement flow fixed two issues:
+The blue-zone replacement flow fixed these issues, but it is now historical
+context rather than final proof:
 
 ```text
 1. Install kirin9030 platform plugin under /root/cann-kit/tools/platform/kirin9030.
 2. Pass --platform kirin9030 to OMG.
 3. Remove the fixed-batch class-token Equal/Where/Expand helper chain from ONNX.
 ```
+
+For the current yellow-zone flow, do not assume the Kirin 9030 platform package
+is needed because of custom operators. This project writes no custom operators.
+Use `--platform kirin9030` only when the yellow-zone DDK workflow requires or
+benefits from target-specific conversion, and keep logs for both platform and
+non-platform attempts if uncertain.
 
 ## What OM Means
 
