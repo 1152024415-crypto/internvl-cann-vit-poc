@@ -40,7 +40,7 @@ calib_images/
 Work directory:
 success_demo/quant/om_compare/
 
-OM output directory to be filled by the DDK/OM runtime tool:
+OM output directory to be filled only after device-side OM execution:
 success_demo/quant/om_compare/om_outputs/
 ```
 
@@ -117,10 +117,14 @@ int8_onnx_outputs/*_visual_tokens_int8_onnx_fp32.bin
   Raw fp32 INT8 ONNX reference output. Shape is [1, 256, 1024].
 ```
 
-## Step 2: Run The OM With The Same Input Bins
+## Step 2: Run The OM On The Device With The Same Input Bins
 
-This step depends on the yellow-zone DDK tool you use to execute `.om`. Use the
-DDK/OM model-run tool to feed each file listed in:
+The server cannot execute the `.om`. The `.om` must run through the HarmonyOS /
+CANN endpoint runtime on a physical device. The server only prepares the input
+bins and INT8 ONNX reference bins.
+
+Use the device-side demo or the official CANN sample flow to feed each input bin
+listed in:
 
 ```text
 success_demo/quant/om_compare/om_run_plan.csv
@@ -135,12 +139,46 @@ case_id,image,input_bin,expected_om_output_bin,onnx_output_bin
 Inputs:
 
 ```text
-your generated .om file
+your generated .om file, packaged/loaded by the device-side app
 success_demo/quant/om_compare/inputs/*_pixel_values_fp32.bin
 success_demo/quant/om_compare/om_run_plan.csv
 ```
 
-Required output naming if possible:
+There are two valid device-side validation modes.
+
+Mode A: device compares in-app
+
+```text
+Package both files into the app/device-accessible location:
+
+input:
+<case_id>_pixel_values_fp32.bin
+
+expected output:
+<case_id>_visual_tokens_int8_onnx_fp32.bin
+
+The device app runs:
+pixel_values bin -> OM -> runtime output
+
+Then it compares runtime output against:
+visual_tokens_int8_onnx_fp32.bin
+
+The app/log returns cosine, mean_abs_diff, max_abs_diff.
+```
+
+In this mode, there may be no OM output file to pull back to the server. The
+device log itself is the comparison result.
+
+Mode B: device dumps OM output bin
+
+```text
+The device app/sample runs:
+pixel_values bin -> OM -> output bin
+
+Then you pull the output bin back to the server and run Step 3.
+```
+
+Required output naming for Mode B if possible:
 
 ```text
 success_demo/quant/om_compare/om_outputs/<case_id>_visual_tokens_om_fp32.bin
@@ -164,7 +202,11 @@ Outputs:
 success_demo/quant/om_compare/om_outputs/*_visual_tokens_om_fp32.bin
 ```
 
-If your DDK tool cannot control output filenames, create this mapping file:
+These output files exist only in Mode B after you pull device-side dump files
+back to the server.
+
+If your device-side tool cannot control output filenames, create this mapping
+file after pulling the dumps back:
 
 ```text
 success_demo/quant/om_compare/om_output_map.csv
@@ -185,6 +227,12 @@ success_demo/quant/om_compare/
 ```
 
 ## Step 3: Compare INT8 ONNX Reference Bins Against OM Output Bins
+
+Run this step on the server only if you used Mode B and pulled OM output bins
+back from the device.
+
+If you used Mode A, do not run this server-side compare command. Read the
+cosine/mean_abs_diff/max_abs_diff from the device app log instead.
 
 If OM outputs follow the default filename convention:
 
@@ -229,6 +277,19 @@ success_demo/quant/om_compare/int8_onnx_vs_om.csv
 ```
 
 ## Step 4: Read The Result
+
+For Mode A, read these values from the device app log/result:
+
+```text
+cosine
+mean_abs_diff
+max_abs_diff
+output_shape
+latency_ms
+runtime device, expected HIAI_F / NPU path when available
+```
+
+For Mode B, read the server-side JSON generated in Step 3.
 
 Quick summary:
 
@@ -277,7 +338,8 @@ summary.max_abs_diff_max
 
 ## Step 5: Decide The Next Debug Target
 
-Use these initial thresholds:
+Use these initial thresholds for either Mode A device logs or Mode B server-side
+JSON:
 
 ```text
 cosine_mean >= 0.995 and cosine_min not far below 0.99
