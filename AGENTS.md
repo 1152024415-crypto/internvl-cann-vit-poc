@@ -90,6 +90,7 @@ docs/stage-2-onnx-export.md           ONNX export and ONNX Runtime checks
 docs/stage-3-onnx-to-om.md            OMG conversion and OM notes
 docs/stage-4-vit-projector-chain.md   current ViT + projector chain
 docs/stage-5-int8-quantization-runbook.md INT8 quantization + OMG with compress_conf
+docs/onnx-quantization-debug-runbook.md ONNX pair eval and intermediate dump workflow
 docs/release-artifacts.md             GitHub Release asset workflow
 docs/yellow-zone-onnx-to-om-ddk-runbook.md yellow-zone DDK OM regeneration guide
 docs/yellow-zone-validation-runbook.md yellow-zone device validation runbook

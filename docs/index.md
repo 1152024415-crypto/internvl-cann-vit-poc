@@ -55,6 +55,19 @@ stage-4-vit-projector-chain.md
 The current deployment artifact chain and verification numbers for dog/cat
 images.
 
+```text
+stage-5-int8-quantization-runbook.md
+```
+
+INT8 DOPT quantization and OMG conversion path based on the successful demo.
+
+```text
+onnx-quantization-debug-runbook.md
+```
+
+How to compare FP32 and INT8 ONNX accuracy, dump ONNX intermediate tensors, and
+decide whether to debug DOPT quantization or OM/device execution.
+
 ## Artifact Documents
 
 ```text
