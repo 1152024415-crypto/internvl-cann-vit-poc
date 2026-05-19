@@ -139,14 +139,49 @@ reuse executor for RunSync
 The NAPI entry points return Promises so model loading/building and `RunSync`
 do not execute on the ArkUI event thread.
 
+## INT8 Quantization (Stage 5)
+
+FP32 ONNX → OMG produces CPU-only OM (588 ops not supported by NPUCL).
+Solution: INT8 quantization via `dopt_onnx_py3` changes op patterns so NPU
+can execute them natively.
+
+Verified on Linux server (100.102.192.199, cann_lm_310 conda env):
+
+```text
+dopt_onnx_py3/dopt_so.py \
+  --framework 5 -m 0 \
+  --model split_internvit_projector_fixed_b1_no_resize.onnx \
+  --cal_conf int8_8_config_v6.prototxt \
+  --output split_internvit_v6_exclude_conv_int8_8.onnx \
+  --input_shape 'pixel_values:1,3,448,448' \
+  --out_nodes 'visual_features' \
+  --compress_conf split_internvit_v6_exclude_conv_int8_8_param \
+  --device_idx 0
+
+Result: Quantize model success
+```
+
+Key config (`int8_8_config_v6.prototxt`):
+
+```text
+strategy: Quant_INT8-8
+device: USE_CPU
+exclude_op: /vision_model/embeddings/patch_embedding/Conv
+preprocess_parameter: { input_type: IMAGE, ImageNet normalize, ./calib_images }
+```
+
+Next: OMG conversion with `--compress_conf` → device validation.
+
+Reference: `docs/stage-5-int8-quantization-runbook.md`
+
 ## Not Completed
 
 Device-side work still pending:
 
 ```text
-regenerate OM in yellow zone with yellow-zone DDK/OMG
+OMG conversion of INT8 ONNX with --compress_conf
 compile/install on a yellow-zone physical HarmonyOS device
-confirm HIAI_F / NPU placement with the yellow-zone-regenerated OM
+confirm HIAI_F / NPU placement with the INT8 OM
 confirm OH_NNExecutor_RunSync succeeds
 compare output against baseline on device
 measure latency, memory, cold start, 20-run stability

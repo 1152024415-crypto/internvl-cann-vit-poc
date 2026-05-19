@@ -25,16 +25,22 @@ Verified:
 PyTorch projector baseline
 ONNX projector inference vs PyTorch baseline
 blue-zone ONNX projector -> OM conversion with CANN Kit OMG, host-side only
+FP32 ONNX -> yellow-zone DDK OMG -> CPU-only OM (588 ops unsupported by NPUCL)
+FP32 ONNX -> dopt_onnx_py3 INT8 quantization -> INT8 ONNX (Quantize model success)
 ```
 
 Not verified yet:
 
 ```text
-yellow-zone DDK regeneration of the final OM
+INT8 ONNX + --compress_conf -> OMG -> OM (NPU placement check)
 OM runtime inference on HarmonyOS device
 NPU/HIAI_F placement
 latency, memory, cold start, 20-run stability
 ```
+
+Key finding: FP32 ONNX cannot go NPU on Kirin 9030 with current DDK. Must use
+INT8 quantization path (`dopt_onnx_py3`) which changes op patterns to ones NPU
+supports natively. See `docs/stage-5-int8-quantization-runbook.md`.
 
 ## Important Artifacts
 
@@ -83,6 +89,7 @@ docs/stage-1-model-split-baseline.md  model split and PyTorch baselines
 docs/stage-2-onnx-export.md           ONNX export and ONNX Runtime checks
 docs/stage-3-onnx-to-om.md            OMG conversion and OM notes
 docs/stage-4-vit-projector-chain.md   current ViT + projector chain
+docs/stage-5-int8-quantization-runbook.md INT8 quantization + OMG with compress_conf
 docs/release-artifacts.md             GitHub Release asset workflow
 docs/yellow-zone-onnx-to-om-ddk-runbook.md yellow-zone DDK OM regeneration guide
 docs/yellow-zone-validation-runbook.md yellow-zone device validation runbook

@@ -9,6 +9,7 @@ artifacts/
 *.safetensors
 *.onnx
 *.om
+*.omc
 *.bin
 demo/entry/src/main/resources/rawfile/*.om
 demo/entry/src/main/resources/rawfile/*.bin
@@ -21,6 +22,11 @@ demo/entry/src/main/resources/rawfile/*.bin
 !demo/entry/src/main/resources/rawfile/cat_visual_tokens_fp32.bin
 DDK-tools*.zip
 wsl-cann-tools/
+tmp/
+
+# success_demo large files
+success_demo/待量化的ONNX模型/
+success_demo/校准集/
 
 # HarmonyOS / DevEco generated files
 demo/.hvigor/
