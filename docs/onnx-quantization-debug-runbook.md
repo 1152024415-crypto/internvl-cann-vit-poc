@@ -179,9 +179,17 @@ vs
 OM/device layer dump outputs from tools_sysdbg/model_run_tool_internal
 ```
 
-The checked-in scripts compare `.npz` files. If the device dump is raw binary or
-text, first convert each dumped tensor into `.npz` with the same tensor names.
-Then run `scripts/compare_onnx_intermediates.py compare`.
+For final output comparison, use:
+
+```text
+docs/om-vs-onnx-compare-runbook.md
+scripts/eval_om_against_onnx.py
+```
+
+For layer-level comparison, the checked-in scripts compare `.npz` files. If the
+device dump is raw binary or text, first convert each dumped tensor into `.npz`
+with the same tensor names. Then run
+`scripts/compare_onnx_intermediates.py compare`.
 
 Keep these artifacts for review:
 

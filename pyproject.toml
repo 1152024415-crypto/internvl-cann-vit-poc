@@ -23,6 +23,7 @@ internvl-export-onnx = "internvl_vit_poc.onnx_export:main"
 internvl-onnx-verify = "internvl_vit_poc.onnx_verify:main"
 internvl-eval-onnx-pair = "internvl_vit_poc.onnx_pair_eval:main"
 internvl-onnx-intermediate-debug = "internvl_vit_poc.onnx_intermediate_debug:main"
+internvl-eval-om-against-onnx = "internvl_vit_poc.om_onnx_eval:main"
 internvl-simplify-onnx-for-cann = "internvl_vit_poc.onnx_static_surgery:main"
 internvl-export-validation-tensors = "internvl_vit_poc.validation_tensors:main"
 
