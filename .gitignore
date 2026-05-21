@@ -23,6 +23,7 @@ demo/entry/src/main/resources/rawfile/*.bin
 DDK-tools*.zip
 wsl-cann-tools/
 tmp/
+quantized_v6/layer_debug/
 
 # success_demo large files
 success_demo/待量化的ONNX模型/
@@ -35,3 +36,4 @@ demo/oh_modules/
 demo/**/.cxx/
 demo/**/build/
 demo/local.properties
+device_backups/

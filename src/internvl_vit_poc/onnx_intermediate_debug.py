@@ -16,6 +16,67 @@ from .onnx_verify import compare_tensors
 from .preprocess import STATIC_IMAGE_SIZE, load_static_pixel_values
 
 
+DTYPES = {
+    "<f2": np.dtype("<f2"),
+    "<f4": np.dtype("<f4"),
+    "float16": np.dtype("<f2"),
+    "float32": np.dtype("<f4"),
+    "fp16": np.dtype("<f2"),
+    "fp32": np.dtype("<f4"),
+}
+
+
+def parse_shape(value: str) -> list[int]:
+    parts = re.split(r"[,xX]", value)
+    if not parts or any(part.strip() == "" for part in parts):
+        raise ValueError(f"Invalid input shape: {value!r}")
+
+    shape: list[int] = []
+    for part in parts:
+        try:
+            dim = int(part)
+        except ValueError as exc:
+            raise ValueError(f"Invalid input shape dimension: {part!r}") from exc
+        if dim <= 0:
+            raise ValueError(f"Input shape dimensions must be positive: {value!r}")
+        shape.append(dim)
+    return shape
+
+
+def dtype_from_name(name: str) -> np.dtype:
+    try:
+        return DTYPES[name.lower()]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported input dtype: {name}") from exc
+
+
+def load_input_array(
+    *,
+    image: str | Path | None,
+    input_bin: str | Path | None,
+    input_shape: str | None,
+    input_dtype: str,
+    image_size: int,
+) -> np.ndarray:
+    if image and input_bin:
+        raise ValueError("--image and --input-bin are mutually exclusive")
+    if input_bin:
+        if not input_shape:
+            raise ValueError("--input-shape is required with --input-bin")
+        shape = parse_shape(input_shape)
+        dtype = dtype_from_name(input_dtype)
+        array = np.fromfile(input_bin, dtype=dtype)
+        expected_size = int(np.prod(shape))
+        if array.size != expected_size:
+            raise ValueError(
+                f"Input bin element count mismatch: got {array.size}, expected {expected_size} for shape {shape}"
+            )
+        return array.reshape(shape).astype("float32")
+    if not image:
+        raise ValueError("Either --image or --input-bin is required")
+    return load_static_pixel_values(image, image_size).numpy().astype("float32")
+
+
 def select_node_outputs(
     model: onnx.ModelProto,
     *,
@@ -107,6 +168,7 @@ def save_outputs_npz(output_npz: str | Path, outputs: dict[str, np.ndarray]) -> 
     manifest = {
         "npz": str(output_path),
         "tensor_count": len(outputs),
+        "output_names": list(outputs),
         "key_to_name": key_to_name,
     }
     manifest_path = output_path.with_suffix(output_path.suffix + ".manifest.json")
@@ -129,7 +191,13 @@ def load_npz_named(path: str | Path) -> dict[str, np.ndarray]:
 def dump_onnx_outputs(args: argparse.Namespace) -> dict[str, object]:
     import onnxruntime as ort
 
-    pixel_values = load_static_pixel_values(args.image, args.image_size).numpy().astype("float32")
+    pixel_values = load_input_array(
+        image=args.image,
+        input_bin=args.input_bin,
+        input_shape=args.input_shape,
+        input_dtype=args.input_dtype,
+        image_size=args.image_size,
+    )
     session = ort.InferenceSession(args.onnx, providers=[args.provider])
     input_name = args.input_name or session.get_inputs()[0].name
     output_names = args.output_name or [output.name for output in session.get_outputs()]
@@ -139,7 +207,10 @@ def dump_onnx_outputs(args: argparse.Namespace) -> dict[str, object]:
     result = {
         "onnx": args.onnx,
         "image": args.image,
+        "input_bin": args.input_bin,
+        "input_shape": list(pixel_values.shape),
         "input_name": input_name,
+        "output_names": output_names,
         "output_npz": args.output_npz,
         "output_count": len(outputs),
         "manifest": manifest,
@@ -209,7 +280,10 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
 
     dump_parser = subparsers.add_parser("dump", help="Run a debug ONNX and save all requested outputs to NPZ.")
     dump_parser.add_argument("--onnx", required=True)
-    dump_parser.add_argument("--image", required=True)
+    dump_parser.add_argument("--image")
+    dump_parser.add_argument("--input-bin")
+    dump_parser.add_argument("--input-shape")
+    dump_parser.add_argument("--input-dtype", default="float32", choices=sorted(DTYPES))
     dump_parser.add_argument("--output-npz", required=True)
     dump_parser.add_argument("--input-name")
     dump_parser.add_argument("--output-name", action="append")

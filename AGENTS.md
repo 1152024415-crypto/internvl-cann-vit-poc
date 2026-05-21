@@ -13,6 +13,19 @@ image -> vision_model -> pixel_shuffle -> mlp1 -> visual_tokens
 
 The current target is **ViT + projector**, not the full language model.
 
+## Environment Boundary
+
+Use these terms consistently:
+
+```text
+blue-zone = Windows local workspace + optional WSL + hdc-connected device
+yellow-zone = Windows local workspace + Linux server for DDK/DOPT/OMG + hdc-connected device
+```
+
+Blue-zone work can edit code, run Python/ONNX tools, call `hdc shell`, send
+files to the device, and receive dump files from the device. Yellow-zone work is
+needed for DDK tooling: DOPT quantization and OMG/OMC compilation.
+
 ## Current Verified Chain
 
 Read `docs/yellow-zone-agent-handoff.md` first when working in or handing off
@@ -27,14 +40,15 @@ ONNX projector inference vs PyTorch baseline
 blue-zone ONNX projector -> OM conversion with CANN Kit OMG, host-side only
 FP32 ONNX -> yellow-zone DDK OMG -> CPU-only OM (588 ops unsupported by NPUCL)
 FP32 ONNX -> dopt_onnx_py3 INT8 quantization -> INT8 ONNX (Quantize model success)
+INT8 ONNX -> DDK OMG -> OMC runs on phone-side toolchain, but final
+visual_features cosine is only about 0.96 against ONNX reference
 ```
 
 Not verified yet:
 
 ```text
-INT8 ONNX + --compress_conf -> OMG -> OM (NPU placement check)
-OM runtime inference on HarmonyOS device
-NPU/HIAI_F placement
+Layer-level source of OMC/device numeric drift
+High-accuracy OMC runtime inference on HarmonyOS device
 latency, memory, cold start, 20-run stability
 ```
 
@@ -92,6 +106,9 @@ docs/stage-4-vit-projector-chain.md   current ViT + projector chain
 docs/stage-5-int8-quantization-runbook.md INT8 quantization + OMG with compress_conf
 docs/onnx-quantization-debug-runbook.md ONNX pair eval and intermediate dump workflow
 docs/om-vs-onnx-compare-runbook.md INT8 ONNX reference vs OM output compare
+docs/onnx-omc-debug-output-runbook.md debug multi-output ONNX/OMC workflow when runtime dump is unsupported
+docs/superpowers/specs/2026-05-21-onnx-omc-layer-dump-alignment-design.md ONNX vs OMC layer-dump design
+docs/superpowers/plans/2026-05-21-onnx-omc-layer-dump-alignment.md implementation plan for layer dump alignment
 docs/release-artifacts.md             GitHub Release asset workflow
 docs/yellow-zone-onnx-to-om-ddk-runbook.md yellow-zone DDK OM regeneration guide
 docs/yellow-zone-validation-runbook.md yellow-zone device validation runbook
@@ -105,6 +122,22 @@ Use `uv` for Python commands:
 ```powershell
 uv run python -B -m unittest discover -s tests
 ```
+
+## Review Policy
+
+This is a personal PoC project, so default to lightweight review to keep
+iteration fast. Let the user control review depth when practical:
+
+```text
+fast      = self-check + targeted tests only
+standard  = self-check + one focused review for risky changes
+strict    = spec review + code-quality review before moving on
+```
+
+Use `fast` by default for small scripts, docs, and exploratory debugging.
+Escalate to `standard` or `strict` only for high-risk changes such as device
+runtime behavior, artifact-generation logic, destructive file operations,
+public release/push steps, or when the user explicitly asks for deeper review.
 
 Keep the first PoC static:
 

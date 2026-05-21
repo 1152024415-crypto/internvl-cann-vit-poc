@@ -75,6 +75,30 @@ om-vs-onnx-compare-runbook.md
 How to generate INT8 ONNX reference `.bin` outputs, run the OM with the same
 `pixel_values` inputs, and compare OM output against INT8 ONNX output.
 
+```text
+onnx-omc-debug-output-runbook.md
+```
+
+Fallback layer-debug workflow for phones where
+`model_run_tool_internal --enable_item=2` returns `Not supported Type: 1`.
+It adds selected ONNX intermediate tensors as real graph outputs, compiles a
+debug multi-output OMC in yellow-zone, runs normal phone inference, and compares
+`output_0/output_1/...` against ONNX Runtime outputs.
+
+```text
+superpowers/specs/2026-05-21-onnx-omc-layer-dump-alignment-design.md
+```
+
+Design spec for dumping ONNX and device OMC intermediate tensors and finding
+the first layer/block where OMC diverges from ONNX.
+
+```text
+superpowers/plans/2026-05-21-onnx-omc-layer-dump-alignment.md
+```
+
+Implementation plan for adding raw input-bin ONNX dumps, OMC dump inventory,
+manual tensor mapping, and layer-level ONNX-vs-OMC comparison.
+
 ## Artifact Documents
 
 ```text
