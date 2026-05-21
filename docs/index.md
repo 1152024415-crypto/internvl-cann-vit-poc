@@ -102,6 +102,15 @@ manual tensor mapping, and layer-level ONNX-vs-OMC comparison.
 ## Artifact Documents
 
 ```text
+diagnostics/dump_status1_20260521_161723/
+```
+
+Raw phone-side logs for the `model_run_tool_internal --enable_item=2` failure
+on DEL 6.0.0.271 / API 26. Start with `README.md`,
+`05_hilog_filtered.txt`, `03_fd_after_and_limits.txt`, and the hiaiserver
+faultlog files.
+
+```text
 release-artifacts.md
 ```
 
