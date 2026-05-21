@@ -1,0 +1,7 @@
+ model name, model id, item event, enter time, total time(us)
+ split_internvit_v6_exclude_conv_int8_8, 1, load begin, 08:45:11.165475, 0
+ split_internvit_v6_exclude_conv_int8_8, 1, load end, 08:45:11.312493, 147018
+ split_internvit_v6_exclude_conv_int8_8, 1, inference begin, 08:45:11.332956, 0
+ split_internvit_v6_exclude_conv_int8_8, 1, inference end, 08:45:11.984398, 651442
+ split_internvit_v6_exclude_conv_int8_8, 1, unload begin, 08:45:11.990647, 0
+ split_internvit_v6_exclude_conv_int8_8, 1, unload end, 08:45:12.22237, 31590

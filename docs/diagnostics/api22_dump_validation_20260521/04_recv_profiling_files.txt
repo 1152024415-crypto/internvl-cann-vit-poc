@@ -1,0 +1,1 @@
+﻿FileTransfer finish, Size:585007, File count = 2, time:60ms rate:9750.12kB/s
